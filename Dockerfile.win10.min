@@ -99,6 +99,11 @@ ARG CUDNN_VERSION=8.3.2.44
 ARG CUDNN_DIR=cudnn-windows-x86_64-${CUDNN_VERSION}_cuda11.5-archive
 ARG CUDNN_ZIP=${CUDNN_DIR}.zip
 
+LABEL CUDA.VERSION=${CUDA_VERSION} \
+      CUDNN.VERSION=${CUDNN_VERSION} \
+      TENSORRT.VERSION=${TENSORRT_VERSION} \
+      CMAKE.VERSION=${CMAKE_VERSION}
+
 WORKDIR /tmp
 ADD https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/network_installers/cuda_${CUDA_VERSION}_win10_network.exe cuda_${CUDA_VERSION}_win10_network.exe
 COPY ${CUDNN_ZIP} .
