@@ -52,6 +52,14 @@ if [[ "$(< /proc/sys/kernel/osrelease)" == *microsoft* ]]; then
     BACKEND_DIR=${BACKEND_DIR:=C:/tritonserver/backends}
     SERVER=${SERVER:=/mnt/c/tritonserver/bin/tritonserver.exe}
 
+    SIMPLE_AIO_HEALTH_CLIENT_PY=${SDKDIR}/python/simple_http_aio_health_metadata.py
+    SIMPLE_AIO_INFER_CLIENT_PY=${SDKDIR}/python/simple_http_aio_infer_client.py
+    SIMPLE_AIO_STRING_INFER_CLIENT_PY=${SDKDIR}/python/simple_http_aio_string_infer_client.py
+    SIMPLE_AIO_SHM_STRING_CLIENT_PY=${SDKDIR}/python/simple_http_aio_shm_string_client.py
+    SIMPLE_AIO_SHM_CLIENT_PY=${SDKDIR}/python/simple_http_aio_shm_client.py
+    SIMPLE_AIO_CUDASHM_CLIENT_PY=${SDKDIR}/python/simple_http_aio_cudashm_client.py
+    SIMPLE_AIO_MODEL_CONTROL_PY=${SDKDIR}/python/simple_http_aio_model_control.py
+    SIMPLE_AIO_SEQUENCE_INFER_CLIENT_PY=${SDKDIR}/python/simple_http_aio_sequence_sync_infer_client.py
     SIMPLE_HEALTH_CLIENT_PY=${SDKDIR}/python/simple_http_health_metadata.py
     SIMPLE_INFER_CLIENT_PY=${SDKDIR}/python/simple_http_infer_client.py
     SIMPLE_ASYNC_INFER_CLIENT_PY=${SDKDIR}/python/simple_http_async_infer_client.py
@@ -83,6 +91,14 @@ else
     SERVER=${TRITON_DIR}/bin/tritonserver
     BACKEND_DIR=${TRITON_DIR}/backends
 
+    SIMPLE_AIO_HEALTH_CLIENT_PY=../clients/simple_http_aio_health_metadata.py
+    SIMPLE_AIO_INFER_CLIENT_PY=../clients/simple_http_aio_infer_client.py
+    SIMPLE_AIO_STRING_INFER_CLIENT_PY=../clients/simple_http_aio_string_infer_client.py
+    SIMPLE_AIO_SHM_STRING_CLIENT_PY=../clients/simple_http_aio_shm_string_client.py
+    SIMPLE_AIO_SHM_CLIENT_PY=../clients/simple_http_aio_shm_client.py
+    SIMPLE_AIO_CUDASHM_CLIENT_PY=../clients/simple_http_aio_cudashm_client.py
+    SIMPLE_AIO_MODEL_CONTROL_PY=../clients/simple_http_aio_model_control.py
+    SIMPLE_AIO_SEQUENCE_INFER_CLIENT_PY=../clients/simple_http_aio_sequence_sync_infer_client.py
     SIMPLE_HEALTH_CLIENT_PY=../clients/simple_http_health_metadata.py
     SIMPLE_INFER_CLIENT_PY=../clients/simple_http_infer_client.py
     SIMPLE_ASYNC_INFER_CLIENT_PY=../clients/simple_http_async_infer_client.py
@@ -140,9 +156,20 @@ if [ $? -ne 0 ]; then
     cat ${CLIENT_LOG}.health
     RET=1
 fi
+python $SIMPLE_AIO_HEALTH_CLIENT_PY -v >> ${CLIENT_LOG}.health.aio 2>&1
+if [ $? -ne 0 ]; then
+    cat ${CLIENT_LOG}.health.aio
+    RET=1
+fi
 
 IMAGE=../images/vulture.jpeg
 for i in \
+        $SIMPLE_AIO_INFER_CLIENT_PY \
+        $SIMPLE_AIO_STRING_INFER_CLIENT_PY \
+        $SIMPLE_AIO_SHM_STRING_CLIENT_PY \
+        $SIMPLE_AIO_SHM_STRING_CLIENT_PY \
+        $SIMPLE_AIO_CUDASHM_CLIENT_PY \
+        $SIMPLE_AIO_SEQUENCE_INFER_CLIENT_PY \
         $SIMPLE_INFER_CLIENT_PY \
         $SIMPLE_ASYNC_INFER_CLIENT_PY \
         $SIMPLE_IMAGE_CLIENT_PY \
@@ -201,6 +228,15 @@ if [ $? -eq 0 ]; then
 fi
 if [ $(cat ${CLIENT_LOG}.base_path_url | grep "POST /base_path/v2/models/simple/infer" | wc -l) -eq 0 ]; then
     cat ${CLIENT_LOG}.base_path_url
+    RET=1
+fi
+$SIMPLE_AIO_INFER_CLIENT_PY -u localhost:8000/base_path -v >> ${CLIENT_LOG}.base_path_url.aio 2>&1
+if [ $? -eq 0 ]; then
+    cat ${CLIENT_LOG}.base_path_url.aio
+    RET=1
+fi
+if [ $(cat ${CLIENT_LOG}.base_path_url.aio | grep "POST http://localhost:8000/base_path/v2/models/simple/infer" | wc -l) -eq 0 ]; then
+    cat ${CLIENT_LOG}.base_path_url.aio
     RET=1
 fi
 
@@ -263,9 +299,18 @@ if [ $? -ne 0 ]; then
     cat ${CLIENT_LOG}.model_control
     RET=1
 fi
-
 if [ $(cat ${CLIENT_LOG}.model_control | grep "PASS" | wc -l) -ne 1 ]; then
     cat ${CLIENT_LOG}.model_control
+    RET=1
+fi
+
+python $SIMPLE_AIO_MODEL_CONTROL_PY -v >> ${CLIENT_LOG}.model_control.aio 2>&1
+if [ $? -ne 0 ]; then
+    cat ${CLIENT_LOG}.model_control.aio
+    RET=1
+fi
+if [ $(cat ${CLIENT_LOG}.model_control.aio | grep "PASS" | wc -l) -ne 1 ]; then
+    cat ${CLIENT_LOG}.model_control.aio
     RET=1
 fi
 
@@ -310,6 +355,7 @@ set +e
 
 for i in \
     $SIMPLE_SEQUENCE_INFER_CLIENT \
+    $SIMPLE_AIO_SEQUENCE_INFER_CLIENT_PY \
     $SIMPLE_SEQUENCE_INFER_CLIENT_PY; do
 
     $i -v -d >>$CLIENT_LOG 2>&1
