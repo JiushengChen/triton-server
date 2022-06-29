@@ -221,7 +221,7 @@ class HTTPAPIServer : public HTTPServer {
     std::atomic<uint32_t> response_count_;
   };
 
- protected:
+ public:
   explicit HTTPAPIServer(
       const std::shared_ptr<TRITONSERVER_Server>& server,
       triton::server::TraceManager* trace_manager,
