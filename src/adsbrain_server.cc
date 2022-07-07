@@ -25,7 +25,32 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "adsbrain_server.h"
 
+
 namespace triton { namespace server {
+
+TRITONSERVER_Error*
+AdsBrainAPIServer::Create(
+    const std::shared_ptr<TRITONSERVER_Server>& server,
+    triton::server::TraceManager* trace_manager,
+    const std::shared_ptr<SharedMemoryManager>& shm_manager, const int32_t port,
+    const std::string address, const int thread_cnt,
+    const std::string entrypoint,
+    DataCompressor::Type request_compressor,
+    DataCompressor::Type response_compressor,
+    std::unique_ptr<HTTPServer>* http_server)
+{
+  http_server->reset(new AdsBrainAPIServer(
+      server, trace_manager, shm_manager, port, address, thread_cnt,
+      entrypoint, request_compressor, response_compressor));
+
+  const std::string addr = address + ":" + std::to_string(port);
+  LOG_INFO << "Started AdsBrain HTTPService at " << addr
+           << ", entrypoint: " << entrypoint
+           << ", request_compressor: " << (int)request_compressor
+           << ", response_compressor: " << (int)response_compressor;
+
+  return nullptr;
+}
 
 void
 AdsBrainAPIServer::Handle(evhtp_request_t* req)
@@ -42,40 +67,40 @@ AdsBrainAPIServer::Handle(evhtp_request_t* req)
 
   if (uri == "/v2/models/stats") {
     // model statistics
-    HTTPAPIServer::HandleModelStats(req);
+    HandleModelStats(req);
     return;
   }
 
   std::string model_name, version, kind;
   if (RE2::FullMatch(
-          uri, HTTPAPIServer::model_regex_, &model_name,
+          uri, model_regex_, &model_name,
           &version, &kind)) {
     if (kind == "ready") {
       // model ready
-      HTTPAPIServer::HandleModelReady(req, model_name, version);
+      HandleModelReady(req, model_name, version);
       return;
     } else if (kind == "infer") {
       // model infer
-      HTTPAPIServer::HandleInfer(req, model_name, version);
+      HandleInfer(req, model_name, version);
       return;
     } else if (kind == "config") {
       // model configuration
-      HTTPAPIServer::HandleModelConfig(req, model_name, version);
+      HandleModelConfig(req, model_name, version);
       return;
     } else if (kind == "stats") {
       // model statistics
-      HTTPAPIServer::HandleModelStats(req, model_name, version);
+      HandleModelStats(req, model_name, version);
       return;
     } else if (kind == "trace/setting") {
       // Trace with specific model, there is no specification on versioning
       // so fall out and return bad request error if version is specified
       if (version.empty()) {
-        HTTPAPIServer::HandleTrace(req, model_name);
+        HandleTrace(req, model_name);
         return;
       }
     } else if (kind == "") {
       // model metadata
-      HTTPAPIServer::HandleModelMetadata(req, model_name, version);
+      HandleModelMetadata(req, model_name, version);
       return;
     }
   }
@@ -83,39 +108,39 @@ AdsBrainAPIServer::Handle(evhtp_request_t* req)
   std::string region, action, rest, repo_name;
   if (uri == "/v2") {
     // server metadata
-    HTTPAPIServer::HandleServerMetadata(req);
+    HandleServerMetadata(req);
     return;
   } else if (RE2::FullMatch(
                  uri, HTTPAPIServer::server_regex_, &rest)) {
     // server health
-    HTTPAPIServer::HandleServerHealth(req, rest);
+    HandleServerHealth(req, rest);
     return;
   } else if (RE2::FullMatch(
                  uri, HTTPAPIServer::systemsharedmemory_regex_,
                  &region, &action)) {
     // system shared memory
-    HTTPAPIServer::HandleSystemSharedMemory(req, region, action);
+    HandleSystemSharedMemory(req, region, action);
     return;
   } else if (RE2::FullMatch(
                  uri, HTTPAPIServer::cudasharedmemory_regex_,
                  &region, &action)) {
     // cuda shared memory
-    HTTPAPIServer::HandleCudaSharedMemory(req, region, action);
+    HandleCudaSharedMemory(req, region, action);
     return;
   } else if (RE2::FullMatch(
                  uri, HTTPAPIServer::modelcontrol_regex_,
                  &repo_name, &kind, &model_name, &action)) {
     // model repository
     if (kind == "index") {
-      HTTPAPIServer::HandleRepositoryIndex(req, repo_name);
+      HandleRepositoryIndex(req, repo_name);
       return;
     } else if (kind.find("models", 0) == 0) {
-      HTTPAPIServer::HandleRepositoryControl(req, repo_name, model_name, action);
+      HandleRepositoryControl(req, repo_name, model_name, action);
       return;
     }
   } else if (RE2::FullMatch(uri, HTTPAPIServer::trace_regex_)) {
     // trace request on global settings
-    HTTPAPIServer::HandleTrace(req);
+    HandleTrace(req);
     return;
   }
 
@@ -123,25 +148,6 @@ AdsBrainAPIServer::Handle(evhtp_request_t* req)
                  << " - " << static_cast<int>(EVHTP_RES_BADREQ);
 
   evhtp_send_reply(req, EVHTP_RES_BADREQ);
-}
-
-TRITONSERVER_Error*
-AdsBrainAPIServer::Create(
-    const std::shared_ptr<TRITONSERVER_Server>& server,
-    triton::server::TraceManager* trace_manager,
-    const std::shared_ptr<SharedMemoryManager>& shm_manager, const int32_t port,
-    const std::string address, const int thread_cnt,
-    const std::string entrypoint,
-    std::unique_ptr<HTTPServer>* http_server)
-{
-  http_server->reset(new AdsBrainAPIServer(
-      server, trace_manager, shm_manager, port, address, thread_cnt, entrypoint));
-
-  const std::string addr = address + ":" + std::to_string(port);
-  LOG_INFO << "Started AdsBrain HTTPService at " << addr
-           << ", entrypoint is " << entrypoint;
-
-  return nullptr;
 }
 
 }}  // namespace triton::server

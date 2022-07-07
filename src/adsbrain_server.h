@@ -43,6 +43,8 @@ class AdsBrainAPIServer : public HTTPAPIServer {
       const std::shared_ptr<SharedMemoryManager>& smb_manager,
       const int32_t port, const std::string address, const int thread_cnt,
       const std::string entrypoint,
+      DataCompressor::Type request_compressor,
+      DataCompressor::Type response_compressor,
       std::unique_ptr<HTTPServer>* adsbrain_server);
 
  private:
@@ -51,14 +53,30 @@ class AdsBrainAPIServer : public HTTPAPIServer {
       triton::server::TraceManager* trace_manager,
       const std::shared_ptr<SharedMemoryManager>& shm_manager,
       const int32_t port, const std::string address, const int thread_cnt,
-      const std::string entrypoint)
+      const std::string entrypoint,
+      DataCompressor::Type request_compressor,
+      DataCompressor::Type response_compressor)
       : HTTPAPIServer(
             server, trace_manager, shm_manager, port, address, thread_cnt),
-        entrypoint_(entrypoint)
+        entrypoint_(entrypoint),
+        request_compressor_(request_compressor),
+        response_compressor_(response_compressor)
   {}
 
   void Handle(evhtp_request_t* req) override;
-  std::string entrypoint_;
+  DataCompressor::Type GetRequestCompressionType(evhtp_request_t* req) override
+  {
+    return request_compressor_;
+  }
+  DataCompressor::Type GetResponseCompressionType(evhtp_request_t* req) override
+  {
+    return response_compressor_;
+  }
+
+  std::string           entrypoint_;
+  DataCompressor::Type  request_compressor_;
+  DataCompressor::Type  response_compressor_;
+
 };
 
 }}  // namespace triton::server

@@ -66,6 +66,7 @@
 #endif  // TRITON_ENABLE_SAGEMAKER
 #ifdef TRITON_ENABLE_ADSBRAIN
 #include "adsbrain_server.h"
+#include "data_compressor.h"
 #endif  // TRITON_ENABLE_ADSBRAIN
 #ifdef TRITON_ENABLE_VERTEX_AI
 #include "vertex_ai_server.h"
@@ -117,6 +118,10 @@ std::string adsbrain_address_ = "0.0.0.0";
 int adsbrain_thread_cnt_ = 8;
 const std::string adsbrain_entrypoint_env = "AB_ENTRYPOINT";
 std::string adsbrain_entrypoint_ = "";
+const std::string adsbrain_request_compressor_env = "AB_REQUEST_COMPRESSOR";
+triton::server::DataCompressor::Type adsbrain_request_compressor_ = triton::server::DataCompressor::Type::IDENTITY;
+const std::string adsbrain_response_compressor_env = "AB_RESPONSE_COMPRESSOR";
+triton::server::DataCompressor::Type adsbrain_response_compressor_ = triton::server::DataCompressor::Type::IDENTITY;
 #endif  // TRITON_ENABLE_ADSBRAIN
 
 #ifdef TRITON_ENABLE_VERTEX_AI
@@ -815,7 +820,8 @@ StartAdsBrainService(
 {
   TRITONSERVER_Error* err = triton::server::AdsBrainAPIServer::Create(
       server, trace_manager, shm_manager, adsbrain_port_, adsbrain_address_,
-      adsbrain_thread_cnt_, adsbrain_entrypoint_, service);
+      adsbrain_thread_cnt_, adsbrain_entrypoint_,
+      adsbrain_request_compressor_, adsbrain_response_compressor_, service);
   if (err == nullptr) {
     err = (*service)->Start();
   }
@@ -1396,7 +1402,6 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
 #if defined(TRITON_ENABLE_ADSBRAIN)
   int32_t adsbrain_port = adsbrain_port_;
   int32_t adsbrain_thread_cnt = adsbrain_thread_cnt_;
-  std::string adsbrain_entrypoint = adsbrain_entrypoint_;
 #endif  // TRITON_ENABLE_ADSBRAIN
 
 #if defined(TRITON_ENABLE_VERTEX_AI)
@@ -1793,19 +1798,54 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
   adsbrain_port_ = adsbrain_port;
   adsbrain_thread_cnt_ = adsbrain_thread_cnt;
 
+  // entrypoint
   char* v = getenv(adsbrain_entrypoint_env.c_str());
   if(v == NULL) {
-    std::cerr << std::string("Env variable '")
+    std::cerr << std::string("Env variable ")
               << adsbrain_entrypoint_env
-              << "' is undefined! Set it to something like '"
+              << " is undefined! Set it to something like "
               << adsbrain_entrypoint_env
-              <<"=/v2/models/<<MODEL>>/versions/<<VERSION>>/infer'."
+              <<"=/v2/models/<<MODEL>>/versions/<<VERSION>>/infer"
               << std::endl;
     return false;
   }
-  else
-    adsbrain_entrypoint = std::string(v);
-  adsbrain_entrypoint_ = adsbrain_entrypoint;
+  adsbrain_entrypoint_ = std::string(v);
+
+  // request compressor
+  v = getenv(adsbrain_request_compressor_env.c_str());
+  if(v != NULL) {
+    std::string content_encoding(v);
+    if (content_encoding == "deflate") {
+      adsbrain_request_compressor_ = triton::server::DataCompressor::Type::DEFLATE;
+    } else if (content_encoding == "gzip") {
+      adsbrain_request_compressor_ = triton::server::DataCompressor::Type::GZIP;
+    } else if (!content_encoding.empty() && (content_encoding != "identity")) {
+      std::cerr << std::string("Unknown value of env variable ")
+              << adsbrain_request_compressor_env
+              << "! Got: "
+              << content_encoding
+              << std::endl;
+      return false;
+    }
+  }
+
+  // response compressor
+  v = getenv(adsbrain_response_compressor_env.c_str());
+  if(v != NULL) {
+    std::string content_encoding(v);
+    if (content_encoding == "deflate") {
+      adsbrain_response_compressor_ = triton::server::DataCompressor::Type::DEFLATE;
+    } else if (content_encoding == "gzip") {
+      adsbrain_response_compressor_ = triton::server::DataCompressor::Type::GZIP;
+    } else if (!content_encoding.empty() && (content_encoding != "identity")) {
+      std::cerr << std::string("Unknown value of env variable ")
+              << adsbrain_response_compressor_env
+              << "! Got: "
+              << content_encoding
+              << std::endl;
+      return false;
+    }
+  }
 #endif  // TRITON_ENABLE_ADSBRAIN
 
 #if defined(TRITON_ENABLE_VERTEX_AI)

@@ -2173,6 +2173,12 @@ HTTPAPIServer::EVBufferToInput(
     }
   }
 
+  // get real header length
+  if (n > 0 && typeid(*this) != typeid(HTTPAPIServer)) {  // only for adsbrain
+    header_length = *(unsigned int *)((char *)v[n-1].iov_base + v[n-1].iov_len - 4);
+    v[n-1].iov_len -= 4;
+  }
+
   // Extract just the json header from the HTTP body. 'header_length == 0' means
   // that the entire HTTP body should be input data for a raw binary request.
   triton::common::TritonJson::Value request_json;
