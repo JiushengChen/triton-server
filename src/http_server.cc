@@ -2173,9 +2173,16 @@ HTTPAPIServer::EVBufferToInput(
     }
   }
 
-  // get real header length
-  if (n > 0 && typeid(*this) != typeid(HTTPAPIServer)) {  // only for adsbrain
+  // get real header length, only for adsbrain
+  if (n > 0 && typeid(*this) != typeid(HTTPAPIServer)) {
     header_length = *(unsigned int *)((char *)v[n-1].iov_base + v[n-1].iov_len - 4);
+    if (header_length >= v[n-1].iov_len - 4) {
+      return TRITONSERVER_ErrorNew(
+          TRITONSERVER_ERROR_INVALID_ARG,
+          (std::string("tailed inference header size should be in range (0, ") +
+           std::to_string(v[n-1].iov_len - 4) + "), got: " + std::to_string(header_length))
+              .c_str());
+    }
     v[n-1].iov_len -= 4;
   }
 
