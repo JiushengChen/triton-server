@@ -29,6 +29,7 @@
 #endif
 
 #include "http_server.h"
+#include "adsbrain_server.h"
 
 #include <event2/buffer.h>
 #include <re2/re2.h>
@@ -2175,6 +2176,19 @@ HTTPAPIServer::EVBufferToInput(
           TRITONSERVER_ERROR_INTERNAL,
           "unexpected error getting input buffers");
     }
+  }
+
+  // get real header length, only for adsbrain
+  if (n > 0 && typeid(*this) == typeid(triton::server::AdsBrainAPIServer)) {
+    header_length = *(unsigned int *)((char *)v[n-1].iov_base + v[n-1].iov_len - 4);
+    if (header_length >= v[n-1].iov_len - 4) {
+      return TRITONSERVER_ErrorNew(
+          TRITONSERVER_ERROR_INVALID_ARG,
+          (std::string("tailed inference header size should be in range (0, ") +
+           std::to_string(v[n-1].iov_len - 4) + "), got: " + std::to_string(header_length))
+              .c_str());
+    }
+    v[n-1].iov_len -= 4;
   }
 
   // Extract just the json header from the HTTP body. 'header_length == 0' means

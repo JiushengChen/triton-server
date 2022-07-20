@@ -65,6 +65,10 @@
 #ifdef TRITON_ENABLE_SAGEMAKER
 #include "sagemaker_server.h"
 #endif  // TRITON_ENABLE_SAGEMAKER
+#ifdef TRITON_ENABLE_ADSBRAIN
+#include "adsbrain_server.h"
+#include "data_compressor.h"
+#endif  // TRITON_ENABLE_ADSBRAIN
 #ifdef TRITON_ENABLE_VERTEX_AI
 #include "vertex_ai_server.h"
 #endif  // TRITON_ENABLE_VERTEX_AI
@@ -88,7 +92,7 @@ int32_t repository_poll_secs_ = 15;
 // default values and modifyied based on command-line args.
 #ifdef TRITON_ENABLE_HTTP
 std::unique_ptr<triton::server::HTTPServer> http_service_;
-bool allow_http_ = true;
+bool allow_http_ = false;
 int32_t http_port_ = 8000;
 std::string http_address_ = "0.0.0.0";
 #endif  // TRITON_ENABLE_HTTP
@@ -105,6 +109,22 @@ std::pair<int32_t, int32_t> sagemaker_safe_range_ = {-1, -1};
 int sagemaker_thread_cnt_ = 8;
 #endif  // TRITON_ENABLE_SAGEMAKER
 
+#ifdef TRITON_ENABLE_ADSBRAIN
+std::unique_ptr<triton::server::HTTPServer> adsbrain_service_;
+bool allow_adsbrain_ = false;
+int32_t adsbrain_port_ = 8888;
+// Triton uses "0.0.0.0" as default address for AdsBrain.
+std::string adsbrain_address_ = "0.0.0.0";
+// The number of threads to initialize for the AdsBrain HTTP front-end.
+int adsbrain_thread_cnt_ = 8;
+const std::string adsbrain_entrypoint_env = "AB_ENTRYPOINT";
+std::string adsbrain_entrypoint_ = "";
+const std::string adsbrain_request_compressor_env = "AB_REQUEST_COMPRESSOR";
+triton::server::DataCompressor::Type adsbrain_request_compressor_ = triton::server::DataCompressor::Type::IDENTITY;
+const std::string adsbrain_response_compressor_env = "AB_RESPONSE_COMPRESSOR";
+triton::server::DataCompressor::Type adsbrain_response_compressor_ = triton::server::DataCompressor::Type::IDENTITY;
+#endif  // TRITON_ENABLE_ADSBRAIN
+
 #ifdef TRITON_ENABLE_VERTEX_AI
 std::unique_ptr<triton::server::HTTPServer> vertex_ai_service_;
 // Triton uses "0.0.0.0" as default address for Vertex AI.
@@ -118,7 +138,7 @@ std::string vertex_ai_default_model_;
 
 #ifdef TRITON_ENABLE_GRPC
 std::unique_ptr<triton::server::GRPCServer> grpc_service_;
-bool allow_grpc_ = true;
+bool allow_grpc_ = false;
 int32_t grpc_port_ = 8001;
 std::string grpc_address_ = "0.0.0.0";
 bool grpc_use_ssl_ = false;
@@ -273,6 +293,11 @@ enum OptionId {
   OPTION_SAGEMAKER_SAFE_PORT_RANGE,
   OPTION_SAGEMAKER_THREAD_COUNT,
 #endif  // TRITON_ENABLE_SAGEMAKER
+#if defined(TRITON_ENABLE_ADSBRAIN)
+  OPTION_ALLOW_ADSBRAIN,
+  OPTION_ADSBRAIN_PORT,
+  OPTION_ADSBRAIN_THREAD_COUNT,
+#endif  // TRITON_ENABLE_ADSBRAIN
 #if defined(TRITON_ENABLE_VERTEX_AI)
   OPTION_ALLOW_VERTEX_AI,
   OPTION_VERTEX_AI_PORT,
@@ -471,6 +496,15 @@ std::vector<Option> options_
       {OPTION_SAGEMAKER_THREAD_COUNT, "sagemaker-thread-count", Option::ArgInt,
        "Number of threads handling Sagemaker requests. Default is 8."},
 #endif  // TRITON_ENABLE_SAGEMAKER
+#if defined(TRITON_ENABLE_ADSBRAIN)
+      {OPTION_ALLOW_ADSBRAIN, "allow-adsbrain", Option::ArgBool,
+       "Allow the server to listen for AdsBrain requests. Default is false."},
+      {OPTION_ADSBRAIN_PORT, "adsbrain-port", Option::ArgInt,
+       "The port for the server to listen on for AdsBrain requests. Default "
+       "is 8888."},
+      {OPTION_ADSBRAIN_THREAD_COUNT, "adsbrain-thread-count", Option::ArgInt,
+       "Number of threads handling AdsBrain requests. Default is 8."},
+#endif  // TRITON_ENABLE_ADSBRAIN
 #if defined(TRITON_ENABLE_VERTEX_AI)
       {OPTION_ALLOW_VERTEX_AI, "allow-vertex-ai", Option::ArgBool,
        "Allow the server to listen for Vertex AI requests. Default is true if "
@@ -665,6 +699,11 @@ CheckPortCollision()
         sagemaker_safe_range_.second);
   }
 #endif  // TRITON_ENABLE_SAGEMAKER
+#ifdef TRITON_ENABLE_ADSBRAIN
+  if (allow_adsbrain_) {
+    ports.emplace_back("AdsBrain", adsbrain_address_, adsbrain_port_, false, -1, -1);
+  }
+#endif  // TRITON_ENABLE_ADSBRAIN
 #ifdef TRITON_ENABLE_VERTEX_AI
   if (allow_vertex_ai_) {
     ports.emplace_back(
@@ -798,6 +837,30 @@ StartSagemakerService(
 }
 #endif  // TRITON_ENABLE_SAGEMAKER
 
+#ifdef TRITON_ENABLE_ADSBRAIN
+TRITONSERVER_Error*
+StartAdsBrainService(
+    std::unique_ptr<triton::server::HTTPServer>* service,
+    const std::shared_ptr<TRITONSERVER_Server>& server,
+    triton::server::TraceManager* trace_manager,
+    const std::shared_ptr<triton::server::SharedMemoryManager>& shm_manager)
+{
+  TRITONSERVER_Error* err = triton::server::AdsBrainAPIServer::Create(
+      server, trace_manager, shm_manager, adsbrain_port_, adsbrain_address_,
+      adsbrain_thread_cnt_, adsbrain_entrypoint_,
+      adsbrain_request_compressor_, adsbrain_response_compressor_, service);
+  if (err == nullptr) {
+    err = (*service)->Start();
+  }
+
+  if (err != nullptr) {
+    service->reset();
+  }
+
+  return err;
+}
+#endif  // TRITON_ENABLE_ADSBRAIN
+
 #ifdef TRITON_ENABLE_VERTEX_AI
 TRITONSERVER_Error*
 StartVertexAiService(
@@ -873,6 +936,18 @@ StartEndpoints(
     }
   }
 #endif  // TRITON_ENABLE_SAGEMAKER
+
+#ifdef TRITON_ENABLE_ADSBRAIN
+  // Enable AdsBrain endpoints if requested...
+  if (allow_adsbrain_) {
+    TRITONSERVER_Error* err = StartAdsBrainService(
+        &adsbrain_service_, server, trace_manager, shm_manager);
+    if (err != nullptr) {
+      LOG_TRITONSERVER_ERROR(err, "failed to start AdsBrain service");
+      return false;
+    }
+  }
+#endif  // TRITON_ENABLE_ADSBRAIN
 
 #ifdef TRITON_ENABLE_VERTEX_AI
   // Enable Vertex AI endpoints if requested...
@@ -952,6 +1027,18 @@ StopEndpoints()
     sagemaker_service_.reset();
   }
 #endif  // TRITON_ENABLE_SAGEMAKER
+
+#ifdef TRITON_ENABLE_ADSBRAIN
+  if (adsbrain_service_) {
+    TRITONSERVER_Error* err = adsbrain_service_->Stop();
+    if (err != nullptr) {
+      LOG_TRITONSERVER_ERROR(err, "failed to stop AdsBrain service");
+      ret = false;
+    }
+
+    adsbrain_service_.reset();
+  }
+#endif  // TRITON_ENABLE_ADSBRAIN
 
 #ifdef TRITON_ENABLE_VERTEX_AI
   if (vertex_ai_service_) {
@@ -1346,6 +1433,11 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
   std::pair<int32_t, int32_t> sagemaker_safe_range = sagemaker_safe_range_;
 #endif  // TRITON_ENABLE_SAGEMAKER
 
+#if defined(TRITON_ENABLE_ADSBRAIN)
+  int32_t adsbrain_port = adsbrain_port_;
+  int32_t adsbrain_thread_cnt = adsbrain_thread_cnt_;
+#endif  // TRITON_ENABLE_ADSBRAIN
+
 #if defined(TRITON_ENABLE_VERTEX_AI)
   // Set different default value if specific flag is set
   {
@@ -1499,6 +1591,18 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
         sagemaker_thread_cnt = ParseIntOption(optarg);
         break;
 #endif  // TRITON_ENABLE_SAGEMAKER
+
+#if defined(TRITON_ENABLE_ADSBRAIN)
+      case OPTION_ALLOW_ADSBRAIN:
+        allow_adsbrain_ = ParseBoolOption(optarg);
+        break;
+      case OPTION_ADSBRAIN_PORT:
+        adsbrain_port = ParseIntOption(optarg);
+        break;
+      case OPTION_ADSBRAIN_THREAD_COUNT:
+        adsbrain_thread_cnt = ParseIntOption(optarg);
+        break;
+#endif  // TRITON_ENABLE_ADSBRAIN
 
 #if defined(TRITON_ENABLE_VERTEX_AI)
       case OPTION_ALLOW_VERTEX_AI:
@@ -1751,6 +1855,60 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
   sagemaker_safe_range_set_ = sagemaker_safe_range_set;
   sagemaker_safe_range_ = sagemaker_safe_range;
 #endif  // TRITON_ENABLE_SAGEMAKER
+
+#if defined(TRITON_ENABLE_ADSBRAIN)
+  adsbrain_port_ = adsbrain_port;
+  adsbrain_thread_cnt_ = adsbrain_thread_cnt;
+
+  // entrypoint
+  char* v = getenv(adsbrain_entrypoint_env.c_str());
+  if(v == NULL) {
+    std::cerr << std::string("Env variable ")
+              << adsbrain_entrypoint_env
+              << " is undefined! Set it to something like "
+              << adsbrain_entrypoint_env
+              <<"=/v2/models/<<MODEL>>/versions/<<VERSION>>/infer"
+              << std::endl;
+    return false;
+  }
+  adsbrain_entrypoint_ = std::string(v);
+
+  // request compressor
+  v = getenv(adsbrain_request_compressor_env.c_str());
+  if(v != NULL) {
+    std::string content_encoding(v);
+    if (content_encoding == "deflate") {
+      adsbrain_request_compressor_ = triton::server::DataCompressor::Type::DEFLATE;
+    } else if (content_encoding == "gzip") {
+      adsbrain_request_compressor_ = triton::server::DataCompressor::Type::GZIP;
+    } else if (!content_encoding.empty() && (content_encoding != "identity")) {
+      std::cerr << std::string("Unknown value of env variable ")
+              << adsbrain_request_compressor_env
+              << "! Got: "
+              << content_encoding
+              << std::endl;
+      return false;
+    }
+  }
+
+  // response compressor
+  v = getenv(adsbrain_response_compressor_env.c_str());
+  if(v != NULL) {
+    std::string content_encoding(v);
+    if (content_encoding == "deflate") {
+      adsbrain_response_compressor_ = triton::server::DataCompressor::Type::DEFLATE;
+    } else if (content_encoding == "gzip") {
+      adsbrain_response_compressor_ = triton::server::DataCompressor::Type::GZIP;
+    } else if (!content_encoding.empty() && (content_encoding != "identity")) {
+      std::cerr << std::string("Unknown value of env variable ")
+              << adsbrain_response_compressor_env
+              << "! Got: "
+              << content_encoding
+              << std::endl;
+      return false;
+    }
+  }
+#endif  // TRITON_ENABLE_ADSBRAIN
 
 #if defined(TRITON_ENABLE_VERTEX_AI)
   // Set default model repository if specific flag is set, postpone the
