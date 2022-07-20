@@ -911,7 +911,7 @@ StartEndpoints(
 #endif  // TRITON_ENABLE_SAGEMAKER
 
 #ifdef TRITON_ENABLE_ADSBRAIN
-  // Enable Sagemaker endpoints if requested...
+  // Enable AdsBrain endpoints if requested...
   if (allow_adsbrain_) {
     TRITONSERVER_Error* err = StartAdsBrainService(
         &adsbrain_service_, server, trace_manager, shm_manager);
