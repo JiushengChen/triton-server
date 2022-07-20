@@ -29,6 +29,7 @@
 #endif
 
 #include "http_server.h"
+#include "adsbrain_server.h"
 
 #include <event2/buffer.h>
 #include <re2/re2.h>
@@ -2174,7 +2175,7 @@ HTTPAPIServer::EVBufferToInput(
   }
 
   // get real header length, only for adsbrain
-  if (n > 0 && typeid(*this) != typeid(HTTPAPIServer)) {
+  if (n > 0 && typeid(*this) == typeid(triton::server::AdsBrainAPIServer)) {
     header_length = *(unsigned int *)((char *)v[n-1].iov_base + v[n-1].iov_len - 4);
     if (header_length >= v[n-1].iov_len - 4) {
       return TRITONSERVER_ErrorNew(
