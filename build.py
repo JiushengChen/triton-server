@@ -488,6 +488,9 @@ def core_cmake_args(components, backends, cmake_dir, install_dir):
         cmake_core_enable('TRITON_ENABLE_SAGEMAKER', 'sagemaker'
                           in FLAGS.endpoint))
     cargs.append(
+        cmake_core_enable('TRITON_ENABLE_ADSBRAIN', 'adsbrain'
+                          in FLAGS.endpoint))
+    cargs.append(
         cmake_core_enable('TRITON_ENABLE_VERTEX_AI', 'vertex-ai'
                           in FLAGS.endpoint))
 
@@ -1690,7 +1693,7 @@ def enable_all():
         ]
         all_repoagents = ['checksum']
         all_filesystems = ['gcs', 's3', 'azure_storage']
-        all_endpoints = ['http', 'grpc', 'sagemaker', 'vertex-ai']
+        all_endpoints = ['http', 'grpc', 'sagemaker', 'adsbrain', 'vertex-ai']
 
         FLAGS.enable_logging = True
         FLAGS.enable_stats = True
@@ -1951,7 +1954,7 @@ if __name__ == '__main__':
         action='append',
         required=False,
         help=
-        'Include specified endpoint in build. Allowed values are "grpc", "http", "vertex-ai" and "sagemaker".'
+        'Include specified endpoint in build. Allowed values are "grpc", "http", "vertex-ai", "sagemaker" and "adsbrain".'
     )
     parser.add_argument(
         '--filesystem',
