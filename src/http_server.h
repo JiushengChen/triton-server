@@ -293,7 +293,7 @@ class HTTPAPIServer : public HTTPServer {
       const std::string& action);
   void HandleTrace(evhtp_request_t* req, const std::string& model_name = "");
 
-  TRITONSERVER_Error* EVBufferToInput(
+  virtual TRITONSERVER_Error* EVBufferToInput(
       const std::string& model_name, TRITONSERVER_InferenceRequest* irequest,
       evbuffer* input_buffer, InferRequestClass* infer_req,
       size_t header_length);
@@ -324,5 +324,43 @@ class HTTPAPIServer : public HTTPServer {
   re2::RE2 cudasharedmemory_regex_;
   re2::RE2 trace_regex_;
 };
+
+TRITONSERVER_Error*
+EVBufferToJson(
+    triton::common::TritonJson::Value* document, evbuffer_iovec* v, int* v_idx,
+    const size_t length, int n);
+
+TRITONSERVER_Error*
+ValidateInputContentType(triton::common::TritonJson::Value& io);
+
+TRITONSERVER_Error*
+ValidateOutputParameter(triton::common::TritonJson::Value& io);
+
+TRITONSERVER_Error*
+CheckClassificationOutput(
+    triton::common::TritonJson::Value& request_output, uint64_t* num_classes);
+
+TRITONSERVER_Error*
+CheckBinaryInputData(
+    triton::common::TritonJson::Value& request_input, bool* is_binary,
+    size_t* byte_size);
+
+TRITONSERVER_Error*
+CheckBinaryOutputData(
+    triton::common::TritonJson::Value& request_output, bool* is_binary);
+
+TRITONSERVER_Error*
+CheckSharedMemoryData(
+    triton::common::TritonJson::Value& request_input, bool* use_shm,
+    const char** shm_region, uint64_t* offset, uint64_t* byte_size);
+
+TRITONSERVER_Error*
+JsonBytesArrayByteSize(
+    triton::common::TritonJson::Value& tensor_data, size_t* byte_size);
+
+TRITONSERVER_Error*
+ReadDataFromJson(
+    const char* tensor_name, triton::common::TritonJson::Value& tensor_data,
+    char* base, const TRITONSERVER_DataType dtype, int64_t expected_cnt);
 
 }}  // namespace triton::server

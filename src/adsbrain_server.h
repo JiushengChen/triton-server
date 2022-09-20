@@ -45,6 +45,7 @@ class AdsBrainAPIServer : public HTTPAPIServer {
       const std::string entrypoint,
       DataCompressor::Type request_compressor,
       DataCompressor::Type response_compressor,
+      const std::string input_output_json,
       std::unique_ptr<HTTPServer>* adsbrain_server);
 
  private:
@@ -55,15 +56,14 @@ class AdsBrainAPIServer : public HTTPAPIServer {
       const int32_t port, const std::string address, const int thread_cnt,
       const std::string entrypoint,
       DataCompressor::Type request_compressor,
-      DataCompressor::Type response_compressor)
-      : HTTPAPIServer(
-            server, trace_manager, shm_manager, port, address, thread_cnt),
-        entrypoint_(entrypoint),
-        request_compressor_(request_compressor),
-        response_compressor_(response_compressor)
-  {}
+      DataCompressor::Type response_compressor,
+      const std::string input_output_json);
 
   void Handle(evhtp_request_t* req) override;
+  TRITONSERVER_Error* EVBufferToInput(
+      const std::string& model_name, TRITONSERVER_InferenceRequest* irequest,
+      evbuffer* input_buffer, InferRequestClass* infer_req,
+      size_t header_length);
   DataCompressor::Type GetRequestCompressionType(evhtp_request_t* req) override
   {
     return request_compressor_;
@@ -76,6 +76,8 @@ class AdsBrainAPIServer : public HTTPAPIServer {
   std::string           entrypoint_;
   DataCompressor::Type  request_compressor_;
   DataCompressor::Type  response_compressor_;
+  triton::common::TritonJson::Value global_request_json_;
+  size_t global_request_json_length_;
 
 };
 

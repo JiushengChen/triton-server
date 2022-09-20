@@ -122,6 +122,8 @@ const std::string adsbrain_request_compressor_env = "AB_REQUEST_COMPRESSOR";
 triton::server::DataCompressor::Type adsbrain_request_compressor_ = triton::server::DataCompressor::Type::IDENTITY;
 const std::string adsbrain_response_compressor_env = "AB_RESPONSE_COMPRESSOR";
 triton::server::DataCompressor::Type adsbrain_response_compressor_ = triton::server::DataCompressor::Type::IDENTITY;
+const std::string adsbrain_input_output_json_env = "AB_INPUT_OUTPUT_JSON";
+std::string adsbrain_input_output_json_ = "";
 #endif  // TRITON_ENABLE_ADSBRAIN
 
 #ifdef TRITON_ENABLE_VERTEX_AI
@@ -821,7 +823,8 @@ StartAdsBrainService(
   TRITONSERVER_Error* err = triton::server::AdsBrainAPIServer::Create(
       server, trace_manager, shm_manager, adsbrain_port_, adsbrain_address_,
       adsbrain_thread_cnt_, adsbrain_entrypoint_,
-      adsbrain_request_compressor_, adsbrain_response_compressor_, service);
+      adsbrain_request_compressor_, adsbrain_response_compressor_,
+      adsbrain_input_output_json_, service);
   if (err == nullptr) {
     err = (*service)->Start();
   }
@@ -1801,7 +1804,7 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
   // entrypoint
   char* v = getenv(adsbrain_entrypoint_env.c_str());
   if(v == NULL) {
-    std::cerr << std::string("Env variable ")
+    std::cerr << "Env variable "
               << adsbrain_entrypoint_env
               << " is undefined! Set it to something like "
               << adsbrain_entrypoint_env
@@ -1820,11 +1823,11 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
     } else if (content_encoding == "gzip") {
       adsbrain_request_compressor_ = triton::server::DataCompressor::Type::GZIP;
     } else if (!content_encoding.empty() && (content_encoding != "identity")) {
-      std::cerr << std::string("Unknown value of env variable ")
-              << adsbrain_request_compressor_env
-              << "! Got: "
-              << content_encoding
-              << std::endl;
+      std::cerr << "Unknown value of env variable "
+                << adsbrain_request_compressor_env
+                << "! Got: "
+                << content_encoding
+                << std::endl;
       return false;
     }
   }
@@ -1838,14 +1841,21 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
     } else if (content_encoding == "gzip") {
       adsbrain_response_compressor_ = triton::server::DataCompressor::Type::GZIP;
     } else if (!content_encoding.empty() && (content_encoding != "identity")) {
-      std::cerr << std::string("Unknown value of env variable ")
-              << adsbrain_response_compressor_env
-              << "! Got: "
-              << content_encoding
-              << std::endl;
+      std::cerr << "Unknown value of env variable "
+                << adsbrain_response_compressor_env
+                << "! Got: "
+                << content_encoding
+                << std::endl;
       return false;
     }
   }
+
+  // input output json config
+  v = getenv(adsbrain_input_output_json_env.c_str());
+  if(v != NULL) {
+    adsbrain_input_output_json_ = std::string(v);
+  }
+
 #endif  // TRITON_ENABLE_ADSBRAIN
 
 #if defined(TRITON_ENABLE_VERTEX_AI)
