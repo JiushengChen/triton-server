@@ -43,6 +43,12 @@
 
 namespace triton { namespace server {
 
+ TRITONSERVER_Error*
+ WriteDataToJson(
+    triton::common::TritonJson::Value* data_json,
+    const std::string& output_name, const TRITONSERVER_DataType datatype,
+    const void* base, const size_t byte_size, const size_t element_count);
+
 // Generic HTTP server using evhtp
 class HTTPServer {
  public:
@@ -189,7 +195,7 @@ class HTTPAPIServer : public HTTPServer {
     static void InferResponseComplete(
         TRITONSERVER_InferenceResponse* response, const uint32_t flags,
         void* userp);
-    TRITONSERVER_Error* FinalizeResponse(
+    virtual TRITONSERVER_Error* FinalizeResponse(
         TRITONSERVER_InferenceResponse* response);
 
     // Helper function to set infer response header in the form specified by

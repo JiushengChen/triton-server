@@ -184,7 +184,7 @@ HTTPMetricsServer::Create(
 #endif  // TRITON_ENABLE_METRICS
 
 
-namespace {
+// namespace {
 
 // Allocate an evbuffer of size 'byte_size'. Return the 'evb' and
 // the 'base' address of the buffer contents.
@@ -962,7 +962,7 @@ CompressionTypeUsed(const std::string accept_encoding)
   return res;
 }
 
-}  // namespace
+// }  // namespace
 
 HTTPAPIServer::HTTPAPIServer(
     const std::shared_ptr<TRITONSERVER_Server>& server,

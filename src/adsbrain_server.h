@@ -47,6 +47,26 @@ class AdsBrainAPIServer : public HTTPAPIServer {
       DataCompressor::Type response_compressor,
       std::unique_ptr<HTTPServer>* adsbrain_server);
 
+  class AdsBainInferRequestClass : public HTTPAPIServer::InferRequestClass {
+   public:
+    explicit AdsBainInferRequestClass(
+      TRITONSERVER_Server* server, evhtp_request_t* req,
+      DataCompressor::Type response_compression_type) : InferRequestClass(
+        server, req, response_compression_type) {}
+
+    TRITONSERVER_Error* FinalizeResponse(
+        TRITONSERVER_InferenceResponse* response);
+  };
+
+
+ protected:
+  virtual std::unique_ptr<InferRequestClass> CreateInferRequest(
+      evhtp_request_t* req)
+  {
+    return std::unique_ptr<InferRequestClass>(new AdsBainInferRequestClass(
+        server_.get(), req, GetResponseCompressionType(req)));
+  }
+
  private:
   explicit AdsBrainAPIServer(
       const std::shared_ptr<TRITONSERVER_Server>& server,

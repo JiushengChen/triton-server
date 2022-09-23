@@ -150,4 +150,108 @@ AdsBrainAPIServer::Handle(evhtp_request_t* req)
   evhtp_send_reply(req, EVHTP_RES_BADREQ);
 }
 
+TRITONSERVER_Error*
+AdsBrainAPIServer::AdsBainInferRequestClass::FinalizeResponse(
+    TRITONSERVER_InferenceResponse* response)
+{
+  RETURN_IF_ERR(TRITONSERVER_InferenceResponseError(response));
+
+  triton::common::TritonJson::Value response_json(
+      triton::common::TritonJson::ValueType::OBJECT);
+
+  // Go through each response output and transfer information to JSON
+  uint32_t output_count;
+  RETURN_IF_ERR(
+      TRITONSERVER_InferenceResponseOutputCount(response, &output_count));
+
+  std::vector<evbuffer*> ordered_buffers;
+  ordered_buffers.reserve(output_count);
+
+  triton::common::TritonJson::Value response_outputs(
+      triton::common::TritonJson::ValueType::ARRAY);
+
+  for (uint32_t idx = 0; idx < output_count; ++idx) {
+    const char* cname;
+    TRITONSERVER_DataType datatype;
+    const int64_t* shape;
+    uint64_t dim_count;
+    const void* base;
+    size_t byte_size;
+    TRITONSERVER_MemoryType memory_type;
+    int64_t memory_type_id;
+    void* userp;
+
+    RETURN_IF_ERR(TRITONSERVER_InferenceResponseOutput(
+        response, idx, &cname, &datatype, &shape, &dim_count, &base, &byte_size,
+        &memory_type, &memory_type_id, &userp));
+
+    // Handle data. SHM outputs will not have an info.
+    auto info = reinterpret_cast<AllocPayload::OutputInfo*>(userp);
+
+    size_t element_count = 1;
+
+    // Add JSON data, or collect binary data.
+    if (info->kind_ == AllocPayload::OutputInfo::BINARY) {
+      if (byte_size > 0) {
+        ordered_buffers.push_back(info->evbuffer_);
+      }
+    } else if (info->kind_ == AllocPayload::OutputInfo::JSON) {
+      RETURN_IF_ERR(triton::server::WriteDataToJson(
+          &response_outputs, cname, datatype, base, byte_size, element_count));
+    }
+  }
+
+  evbuffer* response_placeholder = evbuffer_new();
+  triton::common::TritonJson::WriteBuffer buffer;
+
+  // Save JSON output
+  if (response_outputs.ArraySize() > 0) {
+    RETURN_IF_ERR(response_json.Add("Response", std::move(response_outputs)));
+    // Write json metadata into response evbuffer
+    RETURN_IF_ERR(response_json.Write(&buffer));
+    evbuffer_add(response_placeholder, buffer.Base(), buffer.Size());
+  }
+
+  // If there is binary data write it next in the appropriate
+  // order... also need the HTTP header when returning binary data.
+  if (!ordered_buffers.empty()) {
+    for (evbuffer* b : ordered_buffers) {
+      evbuffer_add_buffer(response_placeholder, b);
+    }
+  }
+
+  evbuffer* response_body = response_placeholder;
+  switch (response_compression_type_) {
+    case DataCompressor::Type::DEFLATE:
+    case DataCompressor::Type::GZIP: {
+      auto compressed_buffer = evbuffer_new();
+      auto err = DataCompressor::CompressData(
+          response_compression_type_, response_placeholder, compressed_buffer);
+      if (err == nullptr) {
+        response_body = compressed_buffer;
+        evbuffer_free(response_placeholder);
+      } else {
+        // just log the compression error and return the uncompressed data
+        LOG_VERBOSE(1) << "unable to compress response: "
+                       << TRITONSERVER_ErrorMessage(err);
+        TRITONSERVER_ErrorDelete(err);
+        evbuffer_free(compressed_buffer);
+        response_compression_type_ = DataCompressor::Type::IDENTITY;
+      }
+      break;
+    }
+    case DataCompressor::Type::IDENTITY:
+    case DataCompressor::Type::UNKNOWN:
+      // Do nothing for other cases
+      break;
+  }
+  SetResponseHeader(!ordered_buffers.empty(), buffer.Size());
+  evbuffer_add_buffer(req_->buffer_out, response_body);
+  // Destroy the evbuffer object as the data has been moved
+  // to HTTP response buffer
+  evbuffer_free(response_body);
+
+  return nullptr;  // success
+}
+
 }}  // namespace triton::server
