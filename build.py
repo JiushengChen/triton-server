@@ -2200,7 +2200,7 @@ if __name__ == '__main__':
         'common': default_repo_tag,
         'core': default_repo_tag,
         'backend': default_repo_tag,
-        'thirdparty': default_repo_tag
+        'thirdparty': 'r22.05_ab'
     }
     for be in FLAGS.repo_tag:
         parts = be.split(':')

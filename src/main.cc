@@ -117,7 +117,7 @@ std::string vertex_ai_default_model_;
 
 #ifdef TRITON_ENABLE_GRPC
 std::unique_ptr<triton::server::GRPCServer> grpc_service_;
-bool allow_grpc_ = true;
+bool allow_grpc_ = false;
 int32_t grpc_port_ = 8001;
 std::string grpc_address_ = "0.0.0.0";
 bool grpc_use_ssl_ = false;
