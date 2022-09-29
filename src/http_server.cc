@@ -3188,9 +3188,6 @@ HTTPAPIServer::InferRequestClass::FinalizeResponseInBondFormat(
 {
   RETURN_IF_ERR(TRITONSERVER_InferenceResponseError(response));
 
-  triton::common::TritonJson::Value response_json(
-      triton::common::TritonJson::ValueType::OBJECT);
-
   // Go through each response output and transfer information to JSON
   uint32_t output_count;
   RETURN_IF_ERR(
@@ -3238,9 +3235,7 @@ HTTPAPIServer::InferRequestClass::FinalizeResponseInBondFormat(
 
   // Save JSON output
   if (response_outputs.ArraySize() > 0) {
-    RETURN_IF_ERR(response_json.Add("Response", std::move(response_outputs)));
-    // Write json metadata into response evbuffer
-    RETURN_IF_ERR(response_json.Write(&buffer));
+    RETURN_IF_ERR(response_outputs.Write(&buffer));
     evbuffer_add(response_placeholder, buffer.Base(), buffer.Size());
   }
 
