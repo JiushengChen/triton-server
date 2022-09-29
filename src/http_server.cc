@@ -2813,6 +2813,18 @@ HTTPAPIServer::InferRequestClass::InferRequestClass(
   evhtp_connection_t* htpconn = evhtp_request_get_connection(req);
   thread_ = htpconn->thread;
   evhtp_request_pause(req);
+
+  auto request_type = GetEnvironmentVariableOrDefault("RequestType", "DEFAULT");
+  if (request_type == "DEFAULT") {
+    request_type_ = RequestType::DEFAULT;
+  } else if (request_type == "ADSBRAIN_BOND") {
+    request_type_ = RequestType::ADSBRAIN_BOND;
+  } else {
+    LOG_INFO << request_type
+             << " is not supported. Please set the environment"
+             << " variable RequestType as one of [DEFAULT, ADSBRAIN_BOND]";
+    request_type_ = RequestType::DEFAULT;
+  }
 }
 
 void
@@ -2867,13 +2879,7 @@ HTTPAPIServer::InferRequestClass::InferResponseComplete(
     err = TRITONSERVER_ErrorNew(
         TRITONSERVER_ERROR_INTERNAL, "received an unexpected null response");
   } else {
-
-#ifdef ADSBRAIN_USE_BOND_RESPONSE_FORMAT
-    err = infer_request->FinalizeResponseInBondFormat(response);
-#else
     err = infer_request->FinalizeResponse(response);
-#endif  // ADSBRAIN_USE_BOND_RESPONSE_FORMAT
-
   }
 
 #ifdef TRITON_ENABLE_TRACING
@@ -2898,6 +2904,21 @@ HTTPAPIServer::InferRequestClass::InferResponseComplete(
 
 TRITONSERVER_Error*
 HTTPAPIServer::InferRequestClass::FinalizeResponse(
+    TRITONSERVER_InferenceResponse* response) {
+      switch(request_type_) {
+        case RequestType::DEFAULT:
+          return FinalizeResponseInDefaultFormat(response);
+        case RequestType::ADSBRAIN_BOND:
+          return FinalizeResponseInBondFormat(response);
+        default:
+          return TRITONSERVER_ErrorNew(
+            TRITONSERVER_ERROR_INTERNAL,
+            "Does not support this kind of request format");
+      }
+    }
+
+TRITONSERVER_Error*
+HTTPAPIServer::InferRequestClass::FinalizeResponseInDefaultFormat(
     TRITONSERVER_InferenceResponse* response)
 {
   RETURN_IF_ERR(TRITONSERVER_InferenceResponseError(response));
@@ -3207,7 +3228,7 @@ HTTPAPIServer::InferRequestClass::FinalizeResponseInBondFormat(
         ordered_buffers.push_back(info->evbuffer_);
       }
     } else if (info->kind_ == AllocPayload::OutputInfo::JSON) {
-      RETURN_IF_ERR(triton::server::WriteDataToJson(
+      RETURN_IF_ERR(WriteDataToJson(
           &response_outputs, cname, datatype, base, byte_size, element_count));
     }
   }

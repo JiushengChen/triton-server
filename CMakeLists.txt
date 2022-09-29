@@ -35,10 +35,8 @@ set(TRITON_VERSION "0.0.0" CACHE STRING "The version of the Triton shared librar
 option(TRITON_ENABLE_LOGGING "Include logging support in server" ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in server" ON)
 option(TRITON_ENABLE_TRACING "Include tracing support in server" OFF)
-option(ADSBRAIN_USE_BOND_RESPONSE_FORMAT "Return response in Bond format" ON)
 option(TRITON_ENABLE_NVTX "Include NVTX support in server" OFF)
 option(TRITON_ENABLE_GPU "Enable GPU support in server" ON)
-
 option(TRITON_ENABLE_MALI_GPU "Enable Arm Mali GPU support in server" OFF)
 set(TRITON_MIN_COMPUTE_CAPABILITY "6.0" CACHE STRING
     "The minimum CUDA compute capability supported by Triton" )
@@ -94,10 +92,6 @@ endif()
 
 if (TRITON_ENABLE_METRICS_GPU AND NOT TRITON_ENABLE_GPU)
   message(FATAL_ERROR "TRITON_ENABLE_METRICS_GPU=ON requires TRITON_ENABLE_GPU=ON")
-endif()
-
-if (ADSBRAIN_USE_BOND_RESPONSE_FORMAT)
-  message(STATUS "[AdsBrain] Response will be in Adsbrain Bond Format.")
 endif()
 
 if(TRITON_ENABLE_ASAN AND TRITON_ENABLE_GPU)
@@ -219,7 +213,6 @@ ExternalProject_Add(triton-server
     -DTRITON_ENABLE_ASAN:BOOL=${TRITON_ENABLE_ASAN}
     -DTRITON_ENABLE_NVTX:BOOL=${TRITON_ENABLE_NVTX}
     -DTRITON_ENABLE_TRACING:BOOL=${TRITON_ENABLE_TRACING}
-    -DADSBRAIN_USE_BOND_RESPONSE_FORMAT:BOOL=${ADSBRAIN_USE_BOND_RESPONSE_FORMAT}
     -DTRITON_ENABLE_LOGGING:BOOL=${TRITON_ENABLE_LOGGING}
     -DTRITON_ENABLE_STATS:BOOL=${TRITON_ENABLE_STATS}
     -DTRITON_ENABLE_GPU:BOOL=${TRITON_ENABLE_GPU}
