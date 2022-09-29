@@ -192,6 +192,9 @@ class HTTPAPIServer : public HTTPServer {
     virtual TRITONSERVER_Error* FinalizeResponse(
         TRITONSERVER_InferenceResponse* response);
 
+    TRITONSERVER_Error* FinalizeResponseInBondFormat(
+        TRITONSERVER_InferenceResponse* response);
+
     // Helper function to set infer response header in the form specified by
     // the endpoint protocol
     virtual void SetResponseHeader(

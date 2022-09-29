@@ -469,6 +469,8 @@ def core_cmake_args(components, backends, cmake_dir, install_dir):
                           FLAGS.enable_gpu_metrics))
     cargs.append(
         cmake_core_enable('TRITON_ENABLE_TRACING', FLAGS.enable_tracing))
+    cargs.append(
+        cmake_core_enable('ADSBRAIN_USE_BOND_RESPONSE_FORMAT', FLAGS.use_bond_response_format))
     cargs.append(cmake_core_enable('TRITON_ENABLE_NVTX', FLAGS.enable_nvtx))
 
     cargs.append(cmake_core_enable('TRITON_ENABLE_GPU', FLAGS.enable_gpu))
@@ -1668,6 +1670,7 @@ def enable_all():
         FLAGS.enable_metrics = True
         FLAGS.enable_gpu_metrics = True
         FLAGS.enable_tracing = True
+        FLAGS.use_bond_response_format = True
         FLAGS.enable_nvtx = True
         FLAGS.enable_gpu = True
     else:
@@ -1682,6 +1685,7 @@ def enable_all():
         FLAGS.enable_logging = True
         FLAGS.enable_stats = True
         FLAGS.enable_tracing = True
+        FLAGS.use_bond_response_format = True
         FLAGS.enable_gpu = True
 
     requested_backends = []
@@ -1898,6 +1902,10 @@ if __name__ == '__main__':
                         action="store_true",
                         required=False,
                         help='Enable tracing.')
+    parser.add_argument('--use-bond-response-format',
+                        action="store_true",
+                        required=False,
+                        help='Use Adsbrain Bond response format.')
     parser.add_argument('--enable-nvtx',
                         action="store_true",
                         required=False,
