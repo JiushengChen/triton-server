@@ -554,13 +554,6 @@ endif() # TRITON_ENABLE_ADSBRAIN
     )
   endif() # TRITON_ENABLE_TRACING
 
-  if(${ADSBRAIN_USE_BOND_RESPONSE_FORMAT})
-  target_compile_definitions(
-    http-endpoint-library
-    PRIVATE ADSBRAIN_USE_BOND_RESPONSE_FORMAT=1
-  )
-endif() # ADSBRAIN_USE_BOND_RESPONSE_FORMAT
-
   if(${TRITON_ENABLE_NVTX})
     target_compile_definitions(
       http-endpoint-library
