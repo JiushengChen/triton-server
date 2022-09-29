@@ -3193,11 +3193,8 @@ HTTPAPIServer::InferRequestClass::FinalizeResponseInBondFormat(
   RETURN_IF_ERR(
       TRITONSERVER_InferenceResponseOutputCount(response, &output_count));
 
-  std::vector<evbuffer*> ordered_buffers;
-  ordered_buffers.reserve(output_count);
-
-  triton::common::TritonJson::Value response_outputs(
-      triton::common::TritonJson::ValueType::ARRAY);
+  evbuffer* response_placeholder = evbuffer_new();
+  size_t total_byte_size = 0;
 
   for (uint32_t idx = 0; idx < output_count; ++idx) {
     const char* cname;
@@ -3214,36 +3211,21 @@ HTTPAPIServer::InferRequestClass::FinalizeResponseInBondFormat(
         response, idx, &cname, &datatype, &shape, &dim_count, &base, &byte_size,
         &memory_type, &memory_type_id, &userp));
 
-    // Handle data. SHM outputs will not have an info.
-    auto info = reinterpret_cast<AllocPayload::OutputInfo*>(userp);
-
+    const char* cbase = reinterpret_cast<const char*>(base);
     size_t element_count = 1;
-
-    // Add JSON data, or collect binary data.
-    if (info->kind_ == AllocPayload::OutputInfo::BINARY) {
-      if (byte_size > 0) {
-        ordered_buffers.push_back(info->evbuffer_);
-      }
-    } else if (info->kind_ == AllocPayload::OutputInfo::JSON) {
-      RETURN_IF_ERR(WriteDataToJson(
-          &response_outputs, cname, datatype, base, byte_size, element_count));
+    for (size_t j = 0; j < dim_count; ++j) {
+        element_count *= shape[j];
     }
-  }
-
-  evbuffer* response_placeholder = evbuffer_new();
-  triton::common::TritonJson::WriteBuffer buffer;
-
-  // Save JSON output
-  if (response_outputs.ArraySize() > 0) {
-    RETURN_IF_ERR(response_outputs.Write(&buffer));
-    evbuffer_add(response_placeholder, buffer.Base(), buffer.Size());
-  }
-
-  // If there is binary data write it next in the appropriate
-  // order... also need the HTTP header when returning binary data.
-  if (!ordered_buffers.empty()) {
-    for (evbuffer* b : ordered_buffers) {
-      evbuffer_add_buffer(response_placeholder, b);
+    size_t offset = 0;
+    for (size_t i = 0; i < element_count; ++i) {
+      // Each element is in the format of a 4-byte length followed by the data
+      const size_t len = *(reinterpret_cast<const uint32_t*>(cbase + offset));
+      offset += sizeof(uint32_t);
+      // TODO: Add the delimiters for each element and each output? Or let users
+      // define how to combine them in the model inference code?
+      evbuffer_add(response_placeholder, cbase + offset, len);
+      offset += len;
+      total_byte_size += len;
     }
   }
 
@@ -3272,7 +3254,7 @@ HTTPAPIServer::InferRequestClass::FinalizeResponseInBondFormat(
       // Do nothing for other cases
       break;
   }
-  SetResponseHeader(!ordered_buffers.empty(), buffer.Size());
+  SetResponseHeader(total_byte_size>0, total_byte_size);
   evbuffer_add_buffer(req_->buffer_out, response_body);
   // Destroy the evbuffer object as the data has been moved
   // to HTTP response buffer
