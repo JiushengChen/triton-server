@@ -37,7 +37,9 @@ namespace triton { namespace server {
 
 // Handle AdsBrain HTTP requests to inference server APIs
 class AdsBrainAPIServer : public HTTPAPIServer {
- public:
+  enum RequestType { TRITON, ADSBRAIN_BOND };
+
+  public:
   static TRITONSERVER_Error* Create(
       const std::shared_ptr<TRITONSERVER_Server>& server,
       triton::server::TraceManager* trace_manager,
@@ -47,26 +49,12 @@ class AdsBrainAPIServer : public HTTPAPIServer {
 
   class AdsBainInferRequestClass : public HTTPAPIServer::InferRequestClass {
    public:
-    enum RequestType { TRITON, ADSBRAIN_BOND };
-
     explicit AdsBainInferRequestClass(
         TRITONSERVER_Server* server, evhtp_request_t* req,
-        DataCompressor::Type response_compression_type)
-        : InferRequestClass(server, req, response_compression_type)
+        DataCompressor::Type response_compression_type, RequestType request_type)
+        : InferRequestClass(server, req, response_compression_type),
+        request_type_(request_type)
     {
-      auto request_type =
-          GetEnvironmentVariableOrDefault("AB_REQUEST_TYPE", "TRITON");
-      if (request_type == "TRITON") {
-        request_type_ = RequestType::TRITON;
-      } else if (request_type == "ADSBRAIN_BOND") {
-        request_type_ = RequestType::ADSBRAIN_BOND;
-      } else {
-        LOG_INFO << request_type
-                 << " is not supported, so use the default triton format."
-                 << " Set the environment variable AB_REQUEST_TYPE"
-                 << " ([TRITON, ADSBRAIN_BOND]) to switch the request format.";
-        request_type_ = RequestType::TRITON;
-      }
     }
 
     TRITONSERVER_Error* FinalizeResponse(
@@ -82,7 +70,7 @@ class AdsBrainAPIServer : public HTTPAPIServer {
     TRITONSERVER_Error* FinalizeResponseInBondFormat(
         TRITONSERVER_InferenceResponse* response);
 
-    RequestType request_type_ = RequestType::TRITON;
+    RequestType request_type_ = RequestType::ADSBRAIN_BOND;
   };
 
 
@@ -91,7 +79,7 @@ class AdsBrainAPIServer : public HTTPAPIServer {
       evhtp_request_t* req) override
   {
     return std::unique_ptr<InferRequestClass>(new AdsBainInferRequestClass(
-        server_.get(), req, GetResponseCompressionType(req)));
+        server_.get(), req, GetResponseCompressionType(req), request_type_));
   }
 
  private:
@@ -103,7 +91,23 @@ class AdsBrainAPIServer : public HTTPAPIServer {
       : HTTPAPIServer(
             server, trace_manager, shm_manager, port, address, thread_cnt)
   {
+    auto request_type =
+          GetEnvironmentVariableOrDefault("AB_REQUEST_TYPE", "ADSBRAIN_BOND");
+      LOG_INFO << "[adsbrain] AB_REQUEST_TYPE=" << request_type;
+      if (request_type == "TRITON") {
+        request_type_ = RequestType::TRITON;
+      } else if (request_type == "ADSBRAIN_BOND") {
+        request_type_ = RequestType::ADSBRAIN_BOND;
+      } else {
+        LOG_INFO << request_type
+                 << " is not supported, so use the default triton format."
+                 << " Set the environment variable AB_REQUEST_TYPE"
+                 << " ([TRITON, ADSBRAIN_BOND]) to switch the request format.";
+        request_type_ = RequestType::ADSBRAIN_BOND;
+      }
   }
+
+  RequestType request_type_ = RequestType::ADSBRAIN_BOND;
 };
 
 }}  // namespace triton::server
