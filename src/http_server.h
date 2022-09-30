@@ -189,7 +189,7 @@ class HTTPAPIServer : public HTTPServer {
     static void InferResponseComplete(
         TRITONSERVER_InferenceResponse* response, const uint32_t flags,
         void* userp);
-    TRITONSERVER_Error* FinalizeResponse(
+    virtual TRITONSERVER_Error* FinalizeResponse(
         TRITONSERVER_InferenceResponse* response);
 
     // Helper function to set infer response header in the form specified by
