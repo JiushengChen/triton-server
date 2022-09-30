@@ -183,7 +183,7 @@ HTTPMetricsServer::Create(
 #endif  // TRITON_ENABLE_METRICS
 
 
-namespace {
+// namespace {
 
 // Allocate an evbuffer of size 'byte_size'. Return the 'evb' and
 // the 'base' address of the buffer contents.
@@ -957,7 +957,7 @@ CompressionTypeUsed(const std::string accept_encoding)
   return res;
 }
 
-}  // namespace
+// }  // namespace
 
 HTTPAPIServer::HTTPAPIServer(
     const std::shared_ptr<TRITONSERVER_Server>& server,
@@ -2813,18 +2813,6 @@ HTTPAPIServer::InferRequestClass::InferRequestClass(
   evhtp_connection_t* htpconn = evhtp_request_get_connection(req);
   thread_ = htpconn->thread;
   evhtp_request_pause(req);
-
-  auto request_type = GetEnvironmentVariableOrDefault("RequestType", "DEFAULT");
-  if (request_type == "DEFAULT") {
-    request_type_ = RequestType::DEFAULT;
-  } else if (request_type == "ADSBRAIN_BOND") {
-    request_type_ = RequestType::ADSBRAIN_BOND;
-  } else {
-    LOG_INFO << request_type
-             << " is not supported. Please set the environment"
-             << " variable RequestType as one of [DEFAULT, ADSBRAIN_BOND]";
-    request_type_ = RequestType::DEFAULT;
-  }
 }
 
 void
@@ -2904,21 +2892,6 @@ HTTPAPIServer::InferRequestClass::InferResponseComplete(
 
 TRITONSERVER_Error*
 HTTPAPIServer::InferRequestClass::FinalizeResponse(
-    TRITONSERVER_InferenceResponse* response) {
-      switch(request_type_) {
-        case RequestType::DEFAULT:
-          return FinalizeResponseInDefaultFormat(response);
-        case RequestType::ADSBRAIN_BOND:
-          return FinalizeResponseInBondFormat(response);
-        default:
-          return TRITONSERVER_ErrorNew(
-            TRITONSERVER_ERROR_INTERNAL,
-            "Does not support this kind of request format");
-      }
-    }
-
-TRITONSERVER_Error*
-HTTPAPIServer::InferRequestClass::FinalizeResponseInDefaultFormat(
     TRITONSERVER_InferenceResponse* response)
 {
   RETURN_IF_ERR(TRITONSERVER_InferenceResponseError(response));
@@ -3174,87 +3147,6 @@ HTTPAPIServer::InferRequestClass::FinalizeResponseInDefaultFormat(
       break;
   }
   SetResponseHeader(!ordered_buffers.empty(), buffer.Size());
-  evbuffer_add_buffer(req_->buffer_out, response_body);
-  // Destroy the evbuffer object as the data has been moved
-  // to HTTP response buffer
-  evbuffer_free(response_body);
-
-  return nullptr;  // success
-}
-
-TRITONSERVER_Error*
-HTTPAPIServer::InferRequestClass::FinalizeResponseInBondFormat(
-    TRITONSERVER_InferenceResponse* response)
-{
-  RETURN_IF_ERR(TRITONSERVER_InferenceResponseError(response));
-
-  // Go through each response output and transfer information to JSON
-  uint32_t output_count;
-  RETURN_IF_ERR(
-      TRITONSERVER_InferenceResponseOutputCount(response, &output_count));
-
-  evbuffer* response_placeholder = evbuffer_new();
-  size_t total_byte_size = 0;
-
-  for (uint32_t idx = 0; idx < output_count; ++idx) {
-    const char* cname;
-    TRITONSERVER_DataType datatype;
-    const int64_t* shape;
-    uint64_t dim_count;
-    const void* base;
-    size_t byte_size;
-    TRITONSERVER_MemoryType memory_type;
-    int64_t memory_type_id;
-    void* userp;
-
-    RETURN_IF_ERR(TRITONSERVER_InferenceResponseOutput(
-        response, idx, &cname, &datatype, &shape, &dim_count, &base, &byte_size,
-        &memory_type, &memory_type_id, &userp));
-
-    const char* cbase = reinterpret_cast<const char*>(base);
-    size_t element_count = 1;
-    for (size_t j = 0; j < dim_count; ++j) {
-        element_count *= shape[j];
-    }
-    size_t offset = 0;
-    for (size_t i = 0; i < element_count; ++i) {
-      // Each element is in the format of a 4-byte length followed by the data
-      const size_t len = *(reinterpret_cast<const uint32_t*>(cbase + offset));
-      offset += sizeof(uint32_t);
-      // TODO: Add the delimiters for each element and each output? Or let users
-      // define how to combine them in the model inference code?
-      evbuffer_add(response_placeholder, cbase + offset, len);
-      offset += len;
-      total_byte_size += len;
-    }
-  }
-
-  evbuffer* response_body = response_placeholder;
-  switch (response_compression_type_) {
-    case DataCompressor::Type::DEFLATE:
-    case DataCompressor::Type::GZIP: {
-      auto compressed_buffer = evbuffer_new();
-      auto err = DataCompressor::CompressData(
-          response_compression_type_, response_placeholder, compressed_buffer);
-      if (err == nullptr) {
-        response_body = compressed_buffer;
-        evbuffer_free(response_placeholder);
-      } else {
-        // just log the compression error and return the uncompressed data
-        LOG_VERBOSE(1) << "unable to compress response: "
-                       << TRITONSERVER_ErrorMessage(err);
-        TRITONSERVER_ErrorDelete(err);
-        evbuffer_free(compressed_buffer);
-        response_compression_type_ = DataCompressor::Type::IDENTITY;
-      }
-      break;
-    }
-    case DataCompressor::Type::IDENTITY:
-    case DataCompressor::Type::UNKNOWN:
-      // Do nothing for other cases
-      break;
-  }
-  SetResponseHeader(total_byte_size>0, total_byte_size);
   evbuffer_add_buffer(req_->buffer_out, response_body);
   // Destroy the evbuffer object as the data has been moved
   // to HTTP response buffer
