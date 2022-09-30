@@ -176,8 +176,6 @@ class HTTPAPIServer : public HTTPServer {
   // send the response.
   class InferRequestClass {
    public:
-    enum RequestType { DEFAULT, ADSBRAIN_BOND };
-
     explicit InferRequestClass(
         TRITONSERVER_Server* server, evhtp_request_t* req,
         DataCompressor::Type response_compression_type);
@@ -213,12 +211,6 @@ class HTTPAPIServer : public HTTPServer {
     std::list<std::vector<char>> serialized_data_;
 
    protected:
-    TRITONSERVER_Error* FinalizeResponseInDefaultFormat(
-        TRITONSERVER_InferenceResponse* response);
-
-    TRITONSERVER_Error* FinalizeResponseInBondFormat(
-        TRITONSERVER_InferenceResponse* response);
-
     TRITONSERVER_Server* server_;
     evhtp_request_t* req_;
     evthr_t* thread_;
@@ -227,8 +219,6 @@ class HTTPAPIServer : public HTTPServer {
 
     // Counter to keep track of number of responses generated.
     std::atomic<uint32_t> response_count_;
-
-    RequestType request_type_;
   };
 
  protected:
