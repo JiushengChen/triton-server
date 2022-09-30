@@ -95,6 +95,10 @@ AdsBrainAPIServer::AdsBainInferRequestClass::FinalizeResponseInBondFormat(
     for (size_t j = 0; j < dim_count; ++j) {
         element_count *= shape[j];
     }
+
+    // The current implementation may have efficiency issue when element_count
+    // is large. So the model inference code should organize the output tensor
+    // with a small number of elements.
     size_t offset = 0;
     for (size_t i = 0; i < element_count; ++i) {
       // Each element is in the format of a 4-byte length followed by the data
