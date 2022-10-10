@@ -12,9 +12,15 @@
 # apt-get install -y cl-base64
 # apt-get install -y libb64-dev
 
+# rm -rf checksum/
+# rm -rf cmake_build
+# rm -rf opt/
+# rm -rf python
+# rm -rf tritonserver/
+
 python build.py \
   --no-container-build \
-  --build-dir=/datadrive/fhu/github/triton-server-abo-v2/triton-server/ \
+  --build-dir=`pwd` \
   --enable-logging \
   --enable-stats \
   --enable-tracing \
@@ -23,12 +29,13 @@ python build.py \
   --enable-gpu \
   --endpoint=http \
   --endpoint=adsbrain \
-  --repo-tag=common:main \
-  --repo-tag=core:main \
-  --repo-tag=backend:main \
-  --repo-tag=thirdparty:main \
-  --backend=python:main \
-  --repoagent=checksum:main \
+  --repo-tag=common:r22.05 \
+  --repo-tag=core:r22.05 \
+  --repo-tag=backend:r22.05 \
+  --repo-tag=thirdparty:r22.05_ab \
+  --backend=adsbrain:r22.05_ab \
+  --backend=python:r22.05 \
+  --repoagent=checksum:r22.05 \
   --build-type=Debug \
   --build-parallel=80 \
   --verbose
