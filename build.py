@@ -538,6 +538,8 @@ def backend_repo(be):
         return 'tensorflow_backend'
     if be.startswith("openvino"):
         return 'openvino_backend'
+    if (be == 'adsbrain'):
+        return 'triton-adsbrain-backend'
     return '{}_backend'.format(be)
 
 
@@ -565,6 +567,8 @@ def backend_cmake_args(images, components, be, install_dir, library_paths,
         args = []
     elif be == 'tensorrt':
         args = tensorrt_cmake_args()
+    elif be == "adsbrain":
+        args = []
     else:
         args = []
 
@@ -1657,7 +1661,7 @@ def enable_all():
         all_backends = [
             'ensemble', 'identity', 'square', 'repeat', 'tensorflow1',
             'tensorflow2', 'onnxruntime', 'python', 'dali', 'pytorch',
-            'openvino', 'fil', 'tensorrt'
+            'openvino', 'fil', 'tensorrt', 'adsbrain'
         ]
         all_repoagents = ['checksum']
         all_filesystems = ['gcs', 's3', 'azure_storage']
@@ -1673,7 +1677,7 @@ def enable_all():
     else:
         all_backends = [
             'ensemble', 'identity', 'square', 'repeat', 'onnxruntime',
-            'openvino', 'tensorrt'
+            'openvino', 'tensorrt', 'adsbrain'
         ]
         all_repoagents = ['checksum']
         all_filesystems = []
@@ -2271,6 +2275,7 @@ if __name__ == '__main__':
             if (be in CORE_BACKENDS):
                 continue
 
+            github_organization = FLAGS.github_organization
             tagged_be_list = []
             if (be == 'openvino'):
                 tagged_be_list.append(
@@ -2281,12 +2286,12 @@ if __name__ == '__main__':
                         if not skip:
                             tagged_be_list.append(tagged_backend(be, ver))
                         skip = False
+            if (be == 'adsbrain'):
+                github_organization = 'https://github.com/feihugis'
 
             # If armnn_tflite backend, source from external repo for git clone
             if be == 'armnn_tflite':
                 github_organization = 'https://gitlab.com/arm-research/smarter/'
-            else:
-                github_organization = FLAGS.github_organization
 
             if not tagged_be_list:
                 backend_build(be, cmake_script, backends[be], script_build_dir,
