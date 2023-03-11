@@ -2567,7 +2567,7 @@ HTTPAPIServer::EVBufferToRawInput(
       if (base_size == 4 && strncmp(base, "Ping", base_size) == 0) {
         return TRITONSERVER_ErrorNew(
             TRITONSERVER_ERROR_INTERNAL,
-            "Ping received.");
+            "Pong");
       }
 
       RETURN_IF_ERR(TRITONSERVER_InferenceRequestAppendInputData(
