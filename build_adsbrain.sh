@@ -5,6 +5,7 @@ apt-get update
 apt-get install libssl-dev
 apt-get install rapidjson-dev
 apt-get install libboost-all-dev
+apt-get install libarchive-dev
 nv-hostengine -t
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
 wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb
@@ -19,10 +20,9 @@ rm -rf cmake_build
 rm -rf opt/
 rm -rf python
 rm -rf tritonserver/
+rm -rf onnxruntime
 
 python build.py \
-  --no-container-build \
-  --build-dir=`pwd` \
   --enable-logging \
   --enable-stats \
   --enable-tracing \
@@ -37,7 +37,11 @@ python build.py \
   --repo-tag=thirdparty:r22.05_ab \
   --backend=adsbrain:r22.05_ab \
   --backend=python:r22.05 \
+  --backend=onnxruntime:r22.05 \
   --repoagent=checksum:r22.05 \
   --build-type=Release \
   --build-parallel=80 \
   --verbose
+
+#   --no-container-build \
+#   --build-dir=`pwd` \
