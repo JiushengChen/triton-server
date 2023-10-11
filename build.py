@@ -565,6 +565,8 @@ def backend_cmake_args(images, components, be, install_dir, library_paths,
         args = []
     elif be == 'tensorrt':
         args = tensorrt_cmake_args()
+    elif be == "adsbrain":
+        args = []
     else:
         args = []
 
@@ -1657,7 +1659,7 @@ def enable_all():
         all_backends = [
             'ensemble', 'identity', 'square', 'repeat', 'tensorflow1',
             'tensorflow2', 'onnxruntime', 'python', 'dali', 'pytorch',
-            'openvino', 'fil', 'tensorrt'
+            'openvino', 'fil', 'tensorrt', 'adsbrain'
         ]
         all_repoagents = ['checksum']
         all_filesystems = ['gcs', 's3', 'azure_storage']
@@ -1673,7 +1675,7 @@ def enable_all():
     else:
         all_backends = [
             'ensemble', 'identity', 'square', 'repeat', 'onnxruntime',
-            'openvino', 'tensorrt'
+            'openvino', 'tensorrt', 'adsbrain'
         ]
         all_repoagents = ['checksum']
         all_filesystems = []
@@ -2285,7 +2287,7 @@ if __name__ == '__main__':
             # If armnn_tflite backend, source from external repo for git clone
             if be == 'armnn_tflite':
                 github_organization = 'https://gitlab.com/arm-research/smarter/'
-            if be == 'python':
+            elif be in ['python', 'adsbrain']:
                 github_organization = 'https://github.com/JiushengChen/'
             else:
                 github_organization = FLAGS.github_organization
