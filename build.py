@@ -640,7 +640,11 @@ def pytorch_cmake_args(images):
 def onnxruntime_cmake_args(images, library_paths):
     cargs = [
         cmake_backend_arg('onnxruntime', 'TRITON_BUILD_ONNXRUNTIME_VERSION',
-                          None, TRITON_VERSION_MAP[FLAGS.version][2])
+                          None, TRITON_VERSION_MAP[FLAGS.version][2]),
+        cmake_backend_arg('onnxruntime', 'TRITON_BUILD_CUDA_HOME',
+                          None, "/usr/local/cuda"),
+        cmake_backend_arg('onnxruntime', 'TRITON_BUILD_CUDNN_HOME',
+                          None, "/usr/local/cuda"),
     ]
 
     # TRITON_ENABLE_GPU is already set for all backends in backend_cmake_args()

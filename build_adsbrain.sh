@@ -22,6 +22,7 @@ rm -rf python
 rm -rf tritonserver/
 rm -rf onnxruntime
 
+# Build without container
 python build.py \
   --enable-logging \
   --enable-stats \
@@ -41,7 +42,28 @@ python build.py \
   --repoagent=checksum:r22.05 \
   --build-type=Release \
   --build-parallel=80 \
+  --no-container-build \
+  --build-dir=`pwd` \
   --verbose
 
-#   --no-container-build \
-#   --build-dir=`pwd` \
+# Build with container
+python build.py \
+  --enable-logging \
+  --enable-stats \
+  --enable-tracing \
+  --enable-metrics \
+  --enable-gpu-metrics \
+  --enable-gpu \
+  --endpoint=http \
+  --endpoint=adsbrain \
+  --repo-tag=common:r22.05 \
+  --repo-tag=core:r22.05 \
+  --repo-tag=backend:r22.05 \
+  --repo-tag=thirdparty:r22.05_ab \
+  --backend=adsbrain:r22.05_ab \
+  --backend=python:r22.05 \
+  --backend=onnxruntime \
+  --repoagent=checksum:r22.05 \
+  --build-type=Release \
+  --build-parallel=80 \
+  --verbose
