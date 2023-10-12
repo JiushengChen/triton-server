@@ -2211,7 +2211,7 @@ if __name__ == '__main__':
         'common': default_repo_tag,
         'core': default_repo_tag,
         'backend': default_repo_tag,
-        'thirdparty': 'r22.05_ab'
+        'thirdparty': default_repo_tag
     }
     for be in FLAGS.repo_tag:
         parts = be.split(':')
@@ -2296,6 +2296,10 @@ if __name__ == '__main__':
             # If armnn_tflite backend, source from external repo for git clone
             if be == 'armnn_tflite':
                 github_organization = 'https://gitlab.com/arm-research/smarter/'
+            elif be in ['python', 'adsbrain']:
+                github_organization = 'https://github.com/JiushengChen/'
+            else:
+                github_organization = FLAGS.github_organization
 
             if not tagged_be_list:
                 backend_build(be, cmake_script, backends[be], script_build_dir,

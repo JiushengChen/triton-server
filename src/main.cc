@@ -1993,11 +1993,25 @@ main(int argc, char** argv)
     exit(1);
   }
 
-  // Trap SIGINT and SIGTERM to allow server to exit gracefully
-  TRITONSERVER_Error* signal_err = triton::server::RegisterSignalHandler();
-  if (signal_err != nullptr) {
-    LOG_TRITONSERVER_ERROR(signal_err, "failed to register signal handler");
-    exit(1);
+  // Offline workload exit here
+  char* v;
+  int offline_bsz_ = 0;
+  v = getenv("AB_OFFLINE_BATCH_SIZE");
+  if(v != NULL) {
+      try {
+          offline_bsz_ = std::stoi(v);
+      }
+      catch(std::invalid_argument& e) {}
+      if (offline_bsz_ > 0) goto stop;
+  }
+
+  {
+    // Trap SIGINT and SIGTERM to allow server to exit gracefully
+    TRITONSERVER_Error* signal_err = triton::server::RegisterSignalHandler();
+    if (signal_err != nullptr) {
+      LOG_TRITONSERVER_ERROR(signal_err, "failed to register signal handler");
+      exit(1);
+    }
   }
 
   // Start the HTTP, GRPC, and metrics endpoints.
@@ -2023,6 +2037,7 @@ main(int argc, char** argv)
     triton::server::signal_exit_cv_.wait_for(lock, wait_timeout);
   }
 
+stop:
   TRITONSERVER_Error* stop_err = TRITONSERVER_ServerStop(server_ptr);
 
   // If unable to gracefully stop the server then Triton threads and

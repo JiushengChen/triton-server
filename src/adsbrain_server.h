@@ -100,7 +100,7 @@ class AdsBrainAPIServer : public HTTPAPIServer {
         request_type_ = RequestType::ADSBRAIN_BOND;
       } else {
         LOG_INFO << request_type
-                 << " is not supported, so use the default triton format."
+                 << " is not supported, so use the default ADSBRAIN_BOND format."
                  << " Set the environment variable AB_REQUEST_TYPE"
                  << " ([TRITON, ADSBRAIN_BOND]) to switch the request format.";
         request_type_ = RequestType::ADSBRAIN_BOND;
