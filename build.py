@@ -538,6 +538,8 @@ def backend_repo(be):
         return 'tensorflow_backend'
     if be.startswith("openvino"):
         return 'openvino_backend'
+    if (be == 'adsbrain'):
+        return 'triton-adsbrain-backend'
     return '{}_backend'.format(be)
 
 
@@ -638,7 +640,11 @@ def pytorch_cmake_args(images):
 def onnxruntime_cmake_args(images, library_paths):
     cargs = [
         cmake_backend_arg('onnxruntime', 'TRITON_BUILD_ONNXRUNTIME_VERSION',
-                          None, TRITON_VERSION_MAP[FLAGS.version][2])
+                          None, TRITON_VERSION_MAP[FLAGS.version][2]),
+        cmake_backend_arg('onnxruntime', 'TRITON_BUILD_CUDA_HOME',
+                          None, "/usr/local/cuda"),
+        cmake_backend_arg('onnxruntime', 'TRITON_BUILD_CUDNN_HOME',
+                          None, "/usr/local/cuda"),
     ]
 
     # TRITON_ENABLE_GPU is already set for all backends in backend_cmake_args()
@@ -2273,6 +2279,7 @@ if __name__ == '__main__':
             if (be in CORE_BACKENDS):
                 continue
 
+            github_organization = FLAGS.github_organization
             tagged_be_list = []
             if (be == 'openvino'):
                 tagged_be_list.append(
@@ -2283,6 +2290,8 @@ if __name__ == '__main__':
                         if not skip:
                             tagged_be_list.append(tagged_backend(be, ver))
                         skip = False
+            if (be == 'adsbrain'):
+                github_organization = 'https://github.com/feihugis'
 
             # If armnn_tflite backend, source from external repo for git clone
             if be == 'armnn_tflite':
