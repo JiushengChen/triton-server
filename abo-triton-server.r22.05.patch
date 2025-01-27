@@ -1,0 +1,702 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 6d4ec543..76fc7ba9 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -49,6 +49,7 @@ option(TRITON_ENABLE_ENSEMBLE "Include ensemble support in server" OFF)
+ option(TRITON_ENABLE_HTTP "Include HTTP API in server" ON)
+ option(TRITON_ENABLE_GRPC "Include GRPC API in server" ON)
+ option(TRITON_ENABLE_SAGEMAKER "Include AWS SageMaker API in server" OFF)
++option(TRITON_ENABLE_ADSBRAIN "Include Microsoft AdsBrain API in server" OFF)
+ option(TRITON_ENABLE_VERTEX_AI "Include Vertex AI API in server" OFF)
+ 
+ # Metrics
+@@ -109,7 +110,7 @@ FetchContent_Declare(
+ )
+ FetchContent_Declare(
+   repo-third-party
+-  GIT_REPOSITORY https://github.com/triton-inference-server/third_party.git
++  GIT_REPOSITORY https://github.com/JiushengChen/third_party.git
+   GIT_TAG ${TRITON_THIRD_PARTY_REPO_TAG}
+ )
+ 
+@@ -171,9 +172,9 @@ endif() # TRITON_ENABLE_S3
+ if(${TRITON_ENABLE_AZURE_STORAGE})
+   set(TRITON_DEPENDS ${TRITON_DEPENDS} azure-storage-cpplite)
+ endif() # TRITON_ENABLE_AZURE_STORAGE
+-if(${TRITON_ENABLE_HTTP} OR ${TRITON_ENABLE_METRICS} OR ${TRITON_ENABLE_SAGEMAKER} OR ${TRITON_ENABLE_VERTEX_AI})
++if(${TRITON_ENABLE_HTTP} OR ${TRITON_ENABLE_METRICS} OR ${TRITON_ENABLE_SAGEMAKER} OR ${TRITON_ENABLE_ADSBRAIN} OR ${TRITON_ENABLE_VERTEX_AI})
+   set(TRITON_DEPENDS ${TRITON_DEPENDS} libevent libevhtp)
+-endif() # TRITON_ENABLE_HTTP || TRITON_ENABLE_METRICS || TRITON_ENABLE_SAGEMAKER || TRITON_ENABLE_VERTEX_AI
++  endif() # TRITON_ENABLE_HTTP || TRITON_ENABLE_METRICS || TRITON_ENABLE_SAGEMAKER || TRITON_ENABLE_ADSBRAIN || TRITON_ENABLE_VERTEX_AI
+ if(${TRITON_ENABLE_GRPC})
+   set(TRITON_DEPENDS ${TRITON_DEPENDS} grpc)
+ endif() # TRITON_ENABLE_GRPC
+@@ -218,6 +219,7 @@ ExternalProject_Add(triton-server
+     -DTRITON_ENABLE_MALI_GPU:BOOL=${TRITON_ENABLE_MALI_GPU}
+     -DTRITON_ENABLE_HTTP:BOOL=${TRITON_ENABLE_HTTP}
+     -DTRITON_ENABLE_SAGEMAKER:BOOL=${TRITON_ENABLE_SAGEMAKER}
++    -DTRITON_ENABLE_ADSBRAIN:BOOL=${TRITON_ENABLE_ADSBRAIN}
+     -DTRITON_ENABLE_VERTEX_AI:BOOL=${TRITON_ENABLE_VERTEX_AI}
+     -DTRITON_ENABLE_GRPC:BOOL=${TRITON_ENABLE_GRPC}
+     -DTRITON_MIN_COMPUTE_CAPABILITY:STRING=${TRITON_MIN_COMPUTE_CAPABILITY}
+diff --git a/build.py b/build.py
+index 740d7a97..5c5e928c 100755
+--- a/build.py
++++ b/build.py
+@@ -486,6 +486,9 @@ def core_cmake_args(components, backends, cmake_dir, install_dir):
+     cargs.append(
+         cmake_core_enable('TRITON_ENABLE_SAGEMAKER', 'sagemaker'
+                           in FLAGS.endpoint))
++    cargs.append(
++        cmake_core_enable('TRITON_ENABLE_ADSBRAIN', 'adsbrain'
++                          in FLAGS.endpoint))
+     cargs.append(
+         cmake_core_enable('TRITON_ENABLE_VERTEX_AI', 'vertex-ai'
+                           in FLAGS.endpoint))
+@@ -562,6 +565,8 @@ def backend_cmake_args(images, components, be, install_dir, library_paths,
+         args = []
+     elif be == 'tensorrt':
+         args = tensorrt_cmake_args()
++    elif be == "adsbrain":
++        args = []
+     else:
+         args = []
+ 
+@@ -1654,11 +1659,11 @@ def enable_all():
+         all_backends = [
+             'ensemble', 'identity', 'square', 'repeat', 'tensorflow1',
+             'tensorflow2', 'onnxruntime', 'python', 'dali', 'pytorch',
+-            'openvino', 'fil', 'tensorrt'
++            'openvino', 'fil', 'tensorrt', 'adsbrain'
+         ]
+         all_repoagents = ['checksum']
+         all_filesystems = ['gcs', 's3', 'azure_storage']
+-        all_endpoints = ['http', 'grpc', 'sagemaker', 'vertex-ai']
++        all_endpoints = ['http', 'grpc', 'sagemaker', 'adsbrain', 'vertex-ai']
+ 
+         FLAGS.enable_logging = True
+         FLAGS.enable_stats = True
+@@ -1670,7 +1675,7 @@ def enable_all():
+     else:
+         all_backends = [
+             'ensemble', 'identity', 'square', 'repeat', 'onnxruntime',
+-            'openvino', 'tensorrt'
++            'openvino', 'tensorrt', 'adsbrain'
+         ]
+         all_repoagents = ['checksum']
+         all_filesystems = []
+@@ -1919,7 +1924,7 @@ if __name__ == '__main__':
+         action='append',
+         required=False,
+         help=
+-        'Include specified endpoint in build. Allowed values are "grpc", "http", "vertex-ai" and "sagemaker".'
++        'Include specified endpoint in build. Allowed values are "grpc", "http", "vertex-ai", "sagemaker", and "adsbrain".'
+     )
+     parser.add_argument(
+         '--filesystem',
+@@ -2282,6 +2287,8 @@ if __name__ == '__main__':
+             # If armnn_tflite backend, source from external repo for git clone
+             if be == 'armnn_tflite':
+                 github_organization = 'https://gitlab.com/arm-research/smarter/'
++            elif be in ['python', 'adsbrain']:
++                github_organization = 'https://github.com/JiushengChen/'
+             else:
+                 github_organization = FLAGS.github_organization
+ 
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index d17392b8..40c53f54 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -212,6 +212,13 @@ if(${TRITON_ENABLE_SAGEMAKER})
+   )
+ endif() # TRITON_ENABLE_SAGEMAKER
+ 
++if(${TRITON_ENABLE_ADSBRAIN})
++  target_compile_definitions(
++    main
++    PRIVATE TRITON_ENABLE_ADSBRAIN=1
++  )
++endif() # TRITON_ENABLE_SAGEMAKER
++
+ if(${TRITON_ENABLE_VERTEX_AI})
+   target_compile_definitions(
+     main
+@@ -419,6 +426,17 @@ if(${TRITON_ENABLE_HTTP}
+     )
+   endif() # TRITON_ENABLE_SAGEMAKER
+ 
++  if(${TRITON_ENABLE_ADSBRAIN})
++  list(APPEND
++    HTTP_ENDPOINT_SRCS
++    adsbrain_server.cc
++  )
++  list(APPEND
++    HTTP_ENDPOINT_HDRS
++    adsbrain_server.h
++  )
++endif() # TRITON_ENABLE_ADSBRAIN
++
+   if(${TRITON_ENABLE_VERTEX_AI})
+     list(APPEND
+       HTTP_ENDPOINT_SRCS
+diff --git a/src/adsbrain_server.cc b/src/adsbrain_server.cc
+new file mode 100644
+index 00000000..fae61a90
+--- /dev/null
++++ b/src/adsbrain_server.cc
+@@ -0,0 +1,149 @@
++// Copyright 2021-2022, MICROSOFT CORPORATION & AFFILIATES. All rights reserved.
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions
++// are met:
++//  * Redistributions of source code must retain the above copyright
++//    notice, this list of conditions and the following disclaimer.
++//  * Redistributions in binary form must reproduce the above copyright
++//    notice, this list of conditions and the following disclaimer in the
++//    documentation and/or other materials provided with the distribution.
++//  * Neither the name of MICROSOFT CORPORATION nor the names of its
++//    contributors may be used to endorse or promote products derived
++//    from this software without specific prior written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
++// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
++// PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
++// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
++// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
++// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
++// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
++// OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++#include "adsbrain_server.h"
++
++
++namespace triton { namespace server {
++
++TRITONSERVER_Error*
++AdsBrainAPIServer::Create(
++    const std::shared_ptr<TRITONSERVER_Server>& server,
++    triton::server::TraceManager* trace_manager,
++    const std::shared_ptr<SharedMemoryManager>& shm_manager, const int32_t port,
++    const std::string address, const int thread_cnt,
++    std::unique_ptr<HTTPServer>* http_server)
++{
++  http_server->reset(new AdsBrainAPIServer(
++      server, trace_manager, shm_manager, port, address, thread_cnt));
++
++  const std::string addr = address + ":" + std::to_string(port);
++  LOG_INFO << "Started AdsBrain HTTPService at " << addr;
++
++  return nullptr;
++}
++
++TRITONSERVER_Error*
++AdsBrainAPIServer::AdsBainInferRequestClass::FinalizeResponse(
++    TRITONSERVER_InferenceResponse* response)
++{
++  switch(request_type_) {
++        case RequestType::TRITON:
++          return FinalizeResponseInTritonFormat(response);
++        case RequestType::ADSBRAIN_BOND:
++          return FinalizeResponseInBondFormat(response);
++        default:
++          return TRITONSERVER_ErrorNew(
++            TRITONSERVER_ERROR_INTERNAL,
++            "Does not support this kind of request format");
++  }
++}
++
++TRITONSERVER_Error*
++AdsBrainAPIServer::AdsBainInferRequestClass::FinalizeResponseInBondFormat(
++    TRITONSERVER_InferenceResponse* response)
++{
++  RETURN_IF_ERR(TRITONSERVER_InferenceResponseError(response));
++
++  // Go through each response output and transfer information to JSON
++  uint32_t output_count;
++  RETURN_IF_ERR(
++      TRITONSERVER_InferenceResponseOutputCount(response, &output_count));
++
++  evbuffer* response_placeholder = evbuffer_new();
++  size_t total_byte_size = 0;
++
++  for (uint32_t idx = 0; idx < output_count; ++idx) {
++    const char* cname;
++    TRITONSERVER_DataType datatype;
++    const int64_t* shape;
++    uint64_t dim_count;
++    const void* base;
++    size_t byte_size;
++    TRITONSERVER_MemoryType memory_type;
++    int64_t memory_type_id;
++    void* userp;
++
++    RETURN_IF_ERR(TRITONSERVER_InferenceResponseOutput(
++        response, idx, &cname, &datatype, &shape, &dim_count, &base, &byte_size,
++        &memory_type, &memory_type_id, &userp));
++
++    const char* cbase = reinterpret_cast<const char*>(base);
++    size_t element_count = 1;
++    for (size_t j = 0; j < dim_count; ++j) {
++        element_count *= shape[j];
++    }
++
++    // The current implementation may have efficiency issue when element_count
++    // is large. So the model inference code should organize the output tensor
++    // with a small number of elements.
++    size_t offset = 0;
++    for (size_t i = 0; i < element_count; ++i) {
++      // Each element is in the format of a 4-byte length followed by the data
++      const size_t len = *(reinterpret_cast<const uint32_t*>(cbase + offset));
++      offset += sizeof(uint32_t);
++      // TODO: Add the delimiters for each element and each output? Or let users
++      // define how to combine them in the model inference code?
++      evbuffer_add(response_placeholder, cbase + offset, len);
++      offset += len;
++      total_byte_size += len;
++    }
++  }
++
++  evbuffer* response_body = response_placeholder;
++  switch (response_compression_type_) {
++    case DataCompressor::Type::DEFLATE:
++    case DataCompressor::Type::GZIP: {
++      auto compressed_buffer = evbuffer_new();
++      auto err = DataCompressor::CompressData(
++          response_compression_type_, response_placeholder, compressed_buffer);
++      if (err == nullptr) {
++        response_body = compressed_buffer;
++        evbuffer_free(response_placeholder);
++      } else {
++        // just log the compression error and return the uncompressed data
++        LOG_VERBOSE(1) << "unable to compress response: "
++                       << TRITONSERVER_ErrorMessage(err);
++        TRITONSERVER_ErrorDelete(err);
++        evbuffer_free(compressed_buffer);
++        response_compression_type_ = DataCompressor::Type::IDENTITY;
++      }
++      break;
++    }
++    case DataCompressor::Type::IDENTITY:
++    case DataCompressor::Type::UNKNOWN:
++      // Do nothing for other cases
++      break;
++  }
++  SetResponseHeader(total_byte_size>0, total_byte_size);
++  evbuffer_add_buffer(req_->buffer_out, response_body);
++  // Destroy the evbuffer object as the data has been moved
++  // to HTTP response buffer
++  evbuffer_free(response_body);
++
++  return nullptr;  // success
++}
++
++}}  // namespace triton::server
+diff --git a/src/adsbrain_server.h b/src/adsbrain_server.h
+new file mode 100644
+index 00000000..ae050c58
+--- /dev/null
++++ b/src/adsbrain_server.h
+@@ -0,0 +1,113 @@
++
++// Copyright 2021-2022, MICROSOFT CORPORATION & AFFILIATES. All rights reserved.
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions
++// are met:
++//  * Redistributions of source code must retain the above copyright
++//    notice, this list of conditions and the following disclaimer.
++//  * Redistributions in binary form must reproduce the above copyright
++//    notice, this list of conditions and the following disclaimer in the
++//    documentation and/or other materials provided with the distribution.
++//  * Neither the name of MICROSOFT CORPORATION nor the names of its
++//    contributors may be used to endorse or promote products derived
++//    from this software without specific prior written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
++// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
++// PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
++// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
++// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
++// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
++// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
++// OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++#pragma once
++
++#include <mutex>
++
++#include "common.h"
++#include "dirent.h"
++#include "http_server.h"
++#include "triton/core/tritonserver.h"
++
++namespace triton { namespace server {
++
++// Handle AdsBrain HTTP requests to inference server APIs
++class AdsBrainAPIServer : public HTTPAPIServer {
++  enum RequestType { TRITON, ADSBRAIN_BOND };
++
++  public:
++  static TRITONSERVER_Error* Create(
++      const std::shared_ptr<TRITONSERVER_Server>& server,
++      triton::server::TraceManager* trace_manager,
++      const std::shared_ptr<SharedMemoryManager>& smb_manager,
++      const int32_t port, const std::string address, const int thread_cnt,
++      std::unique_ptr<HTTPServer>* http_server);
++
++  class AdsBainInferRequestClass : public HTTPAPIServer::InferRequestClass {
++   public:
++    explicit AdsBainInferRequestClass(
++        TRITONSERVER_Server* server, evhtp_request_t* req,
++        DataCompressor::Type response_compression_type, RequestType request_type)
++        : InferRequestClass(server, req, response_compression_type),
++        request_type_(request_type)
++    {
++    }
++
++    TRITONSERVER_Error* FinalizeResponse(
++        TRITONSERVER_InferenceResponse* response) override;
++
++   private:
++    TRITONSERVER_Error* FinalizeResponseInTritonFormat(
++        TRITONSERVER_InferenceResponse* response)
++    {
++      return InferRequestClass::FinalizeResponse(response);
++    }
++
++    TRITONSERVER_Error* FinalizeResponseInBondFormat(
++        TRITONSERVER_InferenceResponse* response);
++
++    RequestType request_type_ = RequestType::ADSBRAIN_BOND;
++  };
++
++
++ protected:
++  std::unique_ptr<InferRequestClass> CreateInferRequest(
++      evhtp_request_t* req) override
++  {
++    return std::unique_ptr<InferRequestClass>(new AdsBainInferRequestClass(
++        server_.get(), req, GetResponseCompressionType(req), request_type_));
++  }
++
++ private:
++  explicit AdsBrainAPIServer(
++      const std::shared_ptr<TRITONSERVER_Server>& server,
++      triton::server::TraceManager* trace_manager,
++      const std::shared_ptr<SharedMemoryManager>& shm_manager,
++      const int32_t port, const std::string address, const int thread_cnt)
++      : HTTPAPIServer(
++            server, trace_manager, shm_manager, port, address, thread_cnt)
++  {
++    auto request_type =
++          GetEnvironmentVariableOrDefault("AB_REQUEST_TYPE", "ADSBRAIN_BOND");
++      LOG_INFO << "[adsbrain] AB_REQUEST_TYPE=" << request_type;
++      if (request_type == "TRITON") {
++        request_type_ = RequestType::TRITON;
++      } else if (request_type == "ADSBRAIN_BOND") {
++        request_type_ = RequestType::ADSBRAIN_BOND;
++      } else {
++        LOG_INFO << request_type
++                 << " is not supported, so use the default ADSBRAIN_BOND format."
++                 << " Set the environment variable AB_REQUEST_TYPE"
++                 << " ([TRITON, ADSBRAIN_BOND]) to switch the request format.";
++        request_type_ = RequestType::ADSBRAIN_BOND;
++      }
++  }
++
++  RequestType request_type_ = RequestType::ADSBRAIN_BOND;
++};
++
++}}  // namespace triton::server
+diff --git a/src/http_server.cc b/src/http_server.cc
+index de018aaa..d94986bf 100644
+--- a/src/http_server.cc
++++ b/src/http_server.cc
+@@ -183,7 +183,7 @@ HTTPMetricsServer::Create(
+ #endif  // TRITON_ENABLE_METRICS
+ 
+ 
+-namespace {
++// namespace {
+ 
+ // Allocate an evbuffer of size 'byte_size'. Return the 'evb' and
+ // the 'base' address of the buffer contents.
+@@ -957,7 +957,7 @@ CompressionTypeUsed(const std::string accept_encoding)
+   return res;
+ }
+ 
+-}  // namespace
++// }  // namespace
+ 
+ HTTPAPIServer::HTTPAPIServer(
+     const std::shared_ptr<TRITONSERVER_Server>& server,
+@@ -2564,6 +2564,12 @@ HTTPAPIServer::EVBufferToRawInput(
+         v_idx++;
+       }
+ 
++      if (base_size == 4 && strncmp(base, "Ping", base_size) == 0) {
++        return TRITONSERVER_ErrorNew(
++            TRITONSERVER_ERROR_INTERNAL,
++            "Pong");
++      }
++
+       RETURN_IF_ERR(TRITONSERVER_InferenceRequestAppendInputData(
+           irequest, raw_input_name, base, base_size, TRITONSERVER_MEMORY_CPU,
+           0 /* memory_type_id */));
+diff --git a/src/http_server.h b/src/http_server.h
+index 8aa29537..d89e9f5e 100644
+--- a/src/http_server.h
++++ b/src/http_server.h
+@@ -189,7 +189,7 @@ class HTTPAPIServer : public HTTPServer {
+     static void InferResponseComplete(
+         TRITONSERVER_InferenceResponse* response, const uint32_t flags,
+         void* userp);
+-    TRITONSERVER_Error* FinalizeResponse(
++    virtual TRITONSERVER_Error* FinalizeResponse(
+         TRITONSERVER_InferenceResponse* response);
+ 
+     // Helper function to set infer response header in the form specified by
+diff --git a/src/main.cc b/src/main.cc
+index b7896c11..717f3783 100644
+--- a/src/main.cc
++++ b/src/main.cc
+@@ -64,6 +64,9 @@
+ #ifdef TRITON_ENABLE_SAGEMAKER
+ #include "sagemaker_server.h"
+ #endif  // TRITON_ENABLE_SAGEMAKER
++#ifdef TRITON_ENABLE_ADSBRAIN
++#include "adsbrain_server.h"
++#endif  // TRITON_ENABLE_ADSBRAIN
+ #ifdef TRITON_ENABLE_VERTEX_AI
+ #include "vertex_ai_server.h"
+ #endif  // TRITON_ENABLE_VERTEX_AI
+@@ -87,7 +90,7 @@ int32_t repository_poll_secs_ = 15;
+ // default values and modifyied based on command-line args.
+ #ifdef TRITON_ENABLE_HTTP
+ std::unique_ptr<triton::server::HTTPServer> http_service_;
+-bool allow_http_ = true;
++bool allow_http_ = false;
+ int32_t http_port_ = 8000;
+ std::string http_address_ = "0.0.0.0";
+ #endif  // TRITON_ENABLE_HTTP
+@@ -104,6 +107,16 @@ std::pair<int32_t, int32_t> sagemaker_safe_range_ = {-1, -1};
+ int sagemaker_thread_cnt_ = 8;
+ #endif  // TRITON_ENABLE_SAGEMAKER
+ 
++#ifdef TRITON_ENABLE_ADSBRAIN
++std::unique_ptr<triton::server::HTTPServer> adsbrain_service_;
++bool allow_adsbrain_ = false;
++int32_t adsbrain_port_ = 8888;
++// Triton uses "0.0.0.0" as default address for AdsBrain.
++std::string adsbrain_address_ = "0.0.0.0";
++// The number of threads to initialize for the AdsBrain HTTP front-end.
++int adsbrain_thread_cnt_ = 8;
++#endif  // TRITON_ENABLE_ADSBRAIN
++
+ #ifdef TRITON_ENABLE_VERTEX_AI
+ std::unique_ptr<triton::server::HTTPServer> vertex_ai_service_;
+ // Triton uses "0.0.0.0" as default address for Vertex AI.
+@@ -117,7 +130,7 @@ std::string vertex_ai_default_model_;
+ 
+ #ifdef TRITON_ENABLE_GRPC
+ std::unique_ptr<triton::server::GRPCServer> grpc_service_;
+-bool allow_grpc_ = true;
++bool allow_grpc_ = false;
+ int32_t grpc_port_ = 8001;
+ std::string grpc_address_ = "0.0.0.0";
+ bool grpc_use_ssl_ = false;
+@@ -270,6 +283,11 @@ enum OptionId {
+   OPTION_SAGEMAKER_SAFE_PORT_RANGE,
+   OPTION_SAGEMAKER_THREAD_COUNT,
+ #endif  // TRITON_ENABLE_SAGEMAKER
++#if defined(TRITON_ENABLE_ADSBRAIN)
++  OPTION_ALLOW_ADSBRAIN,
++  OPTION_ADSBRAIN_PORT,
++  OPTION_ADSBRAIN_THREAD_COUNT,
++#endif  // TRITON_ENABLE_ADSBRAIN
+ #if defined(TRITON_ENABLE_VERTEX_AI)
+   OPTION_ALLOW_VERTEX_AI,
+   OPTION_VERTEX_AI_PORT,
+@@ -454,6 +472,15 @@ std::vector<Option> options_
+       {OPTION_SAGEMAKER_THREAD_COUNT, "sagemaker-thread-count", Option::ArgInt,
+        "Number of threads handling Sagemaker requests. Default is 8."},
+ #endif  // TRITON_ENABLE_SAGEMAKER
++#if defined(TRITON_ENABLE_ADSBRAIN)
++      {OPTION_ALLOW_ADSBRAIN, "allow-adsbrain", Option::ArgBool,
++       "Allow the server to listen for AdsBrain requests. Default is false."},
++      {OPTION_ADSBRAIN_PORT, "adsbrain-port", Option::ArgInt,
++       "The port for the server to listen on for AdsBrain requests. Default "
++       "is 8888."},
++      {OPTION_ADSBRAIN_THREAD_COUNT, "adsbrain-thread-count", Option::ArgInt,
++       "Number of threads handling AdsBrain requests. Default is 8."},
++#endif  // TRITON_ENABLE_ADSBRAIN
+ #if defined(TRITON_ENABLE_VERTEX_AI)
+       {OPTION_ALLOW_VERTEX_AI, "allow-vertex-ai", Option::ArgBool,
+        "Allow the server to listen for Vertex AI requests. Default is true if "
+@@ -638,6 +665,11 @@ CheckPortCollision()
+         sagemaker_safe_range_.second);
+   }
+ #endif  // TRITON_ENABLE_SAGEMAKER
++#ifdef TRITON_ENABLE_ADSBRAIN
++  if (allow_adsbrain_) {
++    ports.emplace_back("AdsBrain", adsbrain_address_, adsbrain_port_, false, -1, -1);
++  }
++#endif  // TRITON_ENABLE_ADSBRAIN
+ #ifdef TRITON_ENABLE_VERTEX_AI
+   if (allow_vertex_ai_) {
+     ports.emplace_back(
+@@ -771,6 +803,29 @@ StartSagemakerService(
+ }
+ #endif  // TRITON_ENABLE_SAGEMAKER
+ 
++#ifdef TRITON_ENABLE_ADSBRAIN
++TRITONSERVER_Error*
++StartAdsBrainService(
++    std::unique_ptr<triton::server::HTTPServer>* service,
++    const std::shared_ptr<TRITONSERVER_Server>& server,
++    triton::server::TraceManager* trace_manager,
++    const std::shared_ptr<triton::server::SharedMemoryManager>& shm_manager)
++{
++  TRITONSERVER_Error* err = triton::server::AdsBrainAPIServer::Create(
++      server, trace_manager, shm_manager, adsbrain_port_, adsbrain_address_,
++      adsbrain_thread_cnt_, service);
++  if (err == nullptr) {
++    err = (*service)->Start();
++  }
++
++  if (err != nullptr) {
++    service->reset();
++  }
++
++  return err;
++}
++#endif  // TRITON_ENABLE_ADSBRAIN
++
+ #ifdef TRITON_ENABLE_VERTEX_AI
+ TRITONSERVER_Error*
+ StartVertexAiService(
+@@ -847,6 +902,18 @@ StartEndpoints(
+   }
+ #endif  // TRITON_ENABLE_SAGEMAKER
+ 
++#ifdef TRITON_ENABLE_ADSBRAIN
++  // Enable AdsBrain endpoints if requested...
++  if (allow_adsbrain_) {
++    TRITONSERVER_Error* err = StartAdsBrainService(
++        &adsbrain_service_, server, trace_manager, shm_manager);
++    if (err != nullptr) {
++      LOG_TRITONSERVER_ERROR(err, "failed to start AdsBrain service");
++      return false;
++    }
++  }
++#endif  // TRITON_ENABLE_ADSBRAIN
++
+ #ifdef TRITON_ENABLE_VERTEX_AI
+   // Enable Vertex AI endpoints if requested...
+   if (allow_vertex_ai_) {
+@@ -926,6 +993,18 @@ StopEndpoints()
+   }
+ #endif  // TRITON_ENABLE_SAGEMAKER
+ 
++#ifdef TRITON_ENABLE_ADSBRAIN
++  if (adsbrain_service_) {
++    TRITONSERVER_Error* err = adsbrain_service_->Stop();
++    if (err != nullptr) {
++      LOG_TRITONSERVER_ERROR(err, "failed to stop AdsBrain service");
++      ret = false;
++    }
++
++    adsbrain_service_.reset();
++  }
++#endif  // TRITON_ENABLE_ADSBRAIN
++
+ #ifdef TRITON_ENABLE_VERTEX_AI
+   if (vertex_ai_service_) {
+     TRITONSERVER_Error* err = vertex_ai_service_->Stop();
+@@ -1312,6 +1391,11 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
+   std::pair<int32_t, int32_t> sagemaker_safe_range = sagemaker_safe_range_;
+ #endif  // TRITON_ENABLE_SAGEMAKER
+ 
++#if defined(TRITON_ENABLE_ADSBRAIN)
++  int32_t adsbrain_port = adsbrain_port_;
++  int32_t adsbrain_thread_cnt = adsbrain_thread_cnt_;
++#endif  // TRITON_ENABLE_ADSBRAIN
++
+ #if defined(TRITON_ENABLE_VERTEX_AI)
+   // Set different default value if specific flag is set
+   {
+@@ -1445,6 +1529,18 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
+         break;
+ #endif  // TRITON_ENABLE_SAGEMAKER
+ 
++#if defined(TRITON_ENABLE_ADSBRAIN)
++      case OPTION_ALLOW_ADSBRAIN:
++        allow_adsbrain_ = ParseBoolOption(optarg);
++        break;
++      case OPTION_ADSBRAIN_PORT:
++        adsbrain_port = ParseIntOption(optarg);
++        break;
++      case OPTION_ADSBRAIN_THREAD_COUNT:
++        adsbrain_thread_cnt = ParseIntOption(optarg);
++        break;
++#endif  // TRITON_ENABLE_ADSBRAIN
++
+ #if defined(TRITON_ENABLE_VERTEX_AI)
+       case OPTION_ALLOW_VERTEX_AI:
+         allow_vertex_ai_ = ParseBoolOption(optarg);
+@@ -1690,6 +1786,11 @@ Parse(TRITONSERVER_ServerOptions** server_options, int argc, char** argv)
+   sagemaker_safe_range_ = sagemaker_safe_range;
+ #endif  // TRITON_ENABLE_SAGEMAKER
+ 
++#if defined(TRITON_ENABLE_ADSBRAIN)
++  adsbrain_port_ = adsbrain_port;
++  adsbrain_thread_cnt_ = adsbrain_thread_cnt;
++#endif  // TRITON_ENABLE_ADSBRAIN
++
+ #if defined(TRITON_ENABLE_VERTEX_AI)
+   // Set default model repository if specific flag is set, postpone the
+   // check to after parsing so we only monitor the default repository if
+@@ -1892,11 +1993,25 @@ main(int argc, char** argv)
+     exit(1);
+   }
+ 
+-  // Trap SIGINT and SIGTERM to allow server to exit gracefully
+-  TRITONSERVER_Error* signal_err = triton::server::RegisterSignalHandler();
+-  if (signal_err != nullptr) {
+-    LOG_TRITONSERVER_ERROR(signal_err, "failed to register signal handler");
+-    exit(1);
++  // Offline workload exit here
++  char* v;
++  int offline_bsz_ = 0;
++  v = getenv("AB_OFFLINE_BATCH_SIZE");
++  if(v != NULL) {
++      try {
++          offline_bsz_ = std::stoi(v);
++      }
++      catch(std::invalid_argument& e) {}
++      if (offline_bsz_ > 0) goto stop;
++  }
++
++  {
++    // Trap SIGINT and SIGTERM to allow server to exit gracefully
++    TRITONSERVER_Error* signal_err = triton::server::RegisterSignalHandler();
++    if (signal_err != nullptr) {
++      LOG_TRITONSERVER_ERROR(signal_err, "failed to register signal handler");
++      exit(1);
++    }
+   }
+ 
+   // Start the HTTP, GRPC, and metrics endpoints.
+@@ -1922,6 +2037,7 @@ main(int argc, char** argv)
+     triton::server::signal_exit_cv_.wait_for(lock, wait_timeout);
+   }
+ 
++stop:
+   TRITONSERVER_Error* stop_err = TRITONSERVER_ServerStop(server_ptr);
+ 
+   // If unable to gracefully stop the server then Triton threads and

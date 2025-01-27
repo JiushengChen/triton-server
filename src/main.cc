@@ -66,6 +66,9 @@
 #ifdef TRITON_ENABLE_SAGEMAKER
 #include "sagemaker_server.h"
 #endif  // TRITON_ENABLE_SAGEMAKER
+#ifdef TRITON_ENABLE_ADSBRAIN
+#include "adsbrain_server.h"
+#endif  // TRITON_ENABLE_ADSBRAIN
 #ifdef TRITON_ENABLE_VERTEX_AI
 #include "vertex_ai_server.h"
 #endif  // TRITON_ENABLE_VERTEX_AI
@@ -97,9 +100,29 @@ std::unique_ptr<triton::server::HTTPServer> g_metrics_service;
 std::unique_ptr<triton::server::HTTPServer> g_sagemaker_service;
 #endif  // TRITON_ENABLE_SAGEMAKER
 
+#ifdef TRITON_ENABLE_ADSBRAIN
+std::unique_ptr<triton::server::HTTPServer> g_adsbrain_service;
+#endif  // TRITON_ENABLE_ADSBRAIN
+
 #ifdef TRITON_ENABLE_VERTEX_AI
 std::unique_ptr<triton::server::HTTPServer> g_vertex_ai_service;
 #endif  // TRITON_ENABLE_VERTEX_AI
+
+/*
+#ifdef TRITON_ENABLE_HTTP
++bool allow_http_ = false;
+
+#ifdef TRITON_ENABLE_ADSBRAIN
++bool allow_adsbrain_ = false;
++int32_t adsbrain_port_ = 8888;
++// Triton uses "0.0.0.0" as default address for AdsBrain.
++std::string adsbrain_address_ = "0.0.0.0";
++// The number of threads to initialize for the AdsBrain HTTP front-end.
++int adsbrain_thread_cnt_ = 8;
+
+#ifdef TRITON_ENABLE_GRPC
++bool allow_grpc_ = false;
+*/
 
 triton::server::TritonServerParameters g_triton_params;
 
@@ -195,6 +218,29 @@ StartSagemakerService(
 }
 #endif  // TRITON_ENABLE_SAGEMAKER
 
+#ifdef TRITON_ENABLE_ADSBRAIN
+TRITONSERVER_Error*
+StartAdsBrainService(
+    std::unique_ptr<triton::server::HTTPServer>* service,
+    const std::shared_ptr<TRITONSERVER_Server>& server,
+    triton::server::TraceManager* trace_manager,
+    const std::shared_ptr<triton::server::SharedMemoryManager>& shm_manager)
+{
+  TRITONSERVER_Error* err = triton::server::AdsBrainAPIServer::Create(
+      server, trace_manager, shm_manager, g_triton_params.adsbrain_port_, g_triton_params.adsbrain_address_,
+      g_triton_params.adsbrain_thread_cnt_, service);
+  if (err == nullptr) {
+    err = (*service)->Start();
+  }
+
+  if (err != nullptr) {
+    service->reset();
+  }
+
+  return err;
+}
+#endif  // TRITON_ENABLE_ADSBRAIN
+
 #ifdef TRITON_ENABLE_VERTEX_AI
 TRITONSERVER_Error*
 StartVertexAiService(
@@ -271,6 +317,18 @@ StartEndpoints(
     }
   }
 #endif  // TRITON_ENABLE_SAGEMAKER
+
+#ifdef TRITON_ENABLE_ADSBRAIN
+  // Enable AdsBrain endpoints if requested...
+  if (g_triton_params.allow_adsbrain_) {
+    TRITONSERVER_Error* err = StartAdsBrainService(
+        &g_adsbrain_service_, server, trace_manager, shm_manager);
+    if (err != nullptr) {
+      LOG_TRITONSERVER_ERROR(err, "failed to start AdsBrain service");
+      return false;
+    }
+  }
+#endif  // TRITON_ENABLE_ADSBRAIN
 
 #ifdef TRITON_ENABLE_VERTEX_AI
   // Enable Vertex AI endpoints if requested...
@@ -350,6 +408,18 @@ StopEndpoints()
     g_sagemaker_service.reset();
   }
 #endif  // TRITON_ENABLE_SAGEMAKER
+
+#ifdef TRITON_ENABLE_ADSBRAIN
+  if (g_adsbrain_service_) {
+    TRITONSERVER_Error* err = g_adsbrain_service_->Stop();
+    if (err != nullptr) {
+      LOG_TRITONSERVER_ERROR(err, "failed to stop AdsBrain service");
+      ret = false;
+    }
+
+    g_adsbrain_service_.reset();
+  }
+#endif  // TRITON_ENABLE_ADSBRAIN
 
 #ifdef TRITON_ENABLE_VERTEX_AI
   if (g_vertex_ai_service) {
@@ -476,11 +546,25 @@ main(int argc, char** argv)
     exit(1);
   }
 
-  // Trap SIGINT and SIGTERM to allow server to exit gracefully
-  TRITONSERVER_Error* signal_err = triton::server::RegisterSignalHandler();
-  if (signal_err != nullptr) {
-    LOG_TRITONSERVER_ERROR(signal_err, "failed to register signal handler");
-    exit(1);
+  // Offline workload exit here
+  char* v;
+  int offline_bsz_ = 0;
+  v = getenv("AB_OFFLINE_BATCH_SIZE");
+  if(v != NULL) {
+      try {
+          offline_bsz_ = std::stoi(v);
+      }
+      catch(std::invalid_argument& e) {}
+      if (offline_bsz_ > 0) goto stop;
+  }
+
+  {
+    // Trap SIGINT and SIGTERM to allow server to exit gracefully
+    TRITONSERVER_Error* signal_err = triton::server::RegisterSignalHandler();
+    if (signal_err != nullptr) {
+      LOG_TRITONSERVER_ERROR(signal_err, "failed to register signal handler");
+      exit(1);
+    }
   }
 
   // Start the HTTP, GRPC, and metrics endpoints.
@@ -508,6 +592,7 @@ main(int argc, char** argv)
     triton::server::signal_exit_cv_.wait_for(lock, wait_timeout);
   }
 
+stop:
   TRITONSERVER_Error* stop_err = TRITONSERVER_ServerStop(server_ptr);
 
   // If unable to gracefully stop the server then Triton threads and

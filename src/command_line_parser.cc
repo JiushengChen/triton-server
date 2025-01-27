@@ -318,6 +318,11 @@ enum TritonOptionId {
   OPTION_SAGEMAKER_SAFE_PORT_RANGE,
   OPTION_SAGEMAKER_THREAD_COUNT,
 #endif  // TRITON_ENABLE_SAGEMAKER
+#if defined(TRITON_ENABLE_ADSBRAIN)
+  OPTION_ALLOW_ADSBRAIN,
+  OPTION_ADSBRAIN_PORT,
+  OPTION_ADSBRAIN_THREAD_COUNT,
+#endif  // TRITON_ENABLE_ADSBRAIN
 #if defined(TRITON_ENABLE_VERTEX_AI)
   OPTION_ALLOW_VERTEX_AI,
   OPTION_VERTEX_AI_PORT,
@@ -613,6 +618,22 @@ TritonParser::SetupOptions()
        "Number of threads handling Sagemaker requests. Default is 8."});
 #endif  // TRITON_ENABLE_SAGEMAKER
 
+#if defined(TRITON_ENABLE_ADSBRAIN)
+  adsbrain_options_.push_back(
+    {OPTION_ALLOW_ADSBRAIN, "allow-adsbrain", Option::ArgBool,
+       "Allow the server to listen for AdsBrain requests. Default is false."}
+  );
+  adsbrain_options_.push_back(
+    {OPTION_ADSBRAIN_PORT, "adsbrain-port", Option::ArgInt,
+       "The port for the server to listen on for AdsBrain requests. Default "
+       "is 8888."}
+  )
+  adsbrain_options_.push_back(
+    {OPTION_ADSBRAIN_THREAD_COUNT, "adsbrain-thread-count", Option::ArgInt,
+       "Number of threads handling AdsBrain requests. Default is 8."}
+  )
+#endif  // TRITON_ENABLE_ADSBRAIN
+
 #if defined(TRITON_ENABLE_VERTEX_AI)
   vertex_options_.push_back(
       {OPTION_ALLOW_VERTEX_AI, "allow-vertex-ai", Option::ArgBool,
@@ -838,6 +859,7 @@ TritonParser::SetupOptionGroups()
   option_groups_.emplace_back("HTTP", http_options_);
   option_groups_.emplace_back("GRPC", grpc_options_);
   option_groups_.emplace_back("Sagemaker", sagemaker_options_);
+  option_groups_.emplace_back("AdsBrain", adsbrain_options_);
   option_groups_.emplace_back("Vertex", vertex_options_);
   option_groups_.emplace_back("Metrics", metric_options_);
   option_groups_.emplace_back("Tracing", tracing_options_);
@@ -889,6 +911,13 @@ TritonServerParameters::CheckPortCollision()
         sagemaker_safe_range_.second);
   }
 #endif  // TRITON_ENABLE_SAGEMAKER
+
+#ifdef TRITON_ENABLE_ADSBRAIN
+  if (allow_adsbrain_) {
+    ports.emplace_back("AdsBrain", adsbrain_address_, adsbrain_port_, false, -1, -1);
+  }
+#endif  // TRITON_ENABLE_ADSBRAIN
+
 #ifdef TRITON_ENABLE_VERTEX_AI
   if (allow_vertex_ai_) {
     ports.emplace_back(
@@ -1172,6 +1201,11 @@ TritonParser::Parse(int argc, char** argv)
   triton::server::grpc::Options& lgrpc_options = lparams.grpc_options_;
 #endif  // TRITON_ENABLE_GRPC
 
+#if defined(TRITON_ENABLE_ADSBRAIN)
+  int32_t adsbrain_port = ADSBRAIN_PORT;
+  int32_t adsbrain_thread_cnt = ADSBRAIN_THREAD_CNT;
+#endif  // TRITON_ENABLE_ADSBRAIN
+
 #ifdef TRITON_ENABLE_VERTEX_AI
   // Set different default value if specific flag is set
   {
@@ -1306,6 +1340,18 @@ TritonParser::Parse(int argc, char** argv)
           lparams.sagemaker_thread_cnt_ = ParseOption<int>(optarg);
           break;
 #endif  // TRITON_ENABLE_SAGEMAKER
+
+#if defined(TRITON_ENABLE_ADSBRAIN)
+        case OPTION_ALLOW_ADSBRAIN:
+          lparams.allow_adsbrain_ = ParseOption<bool>(optarg);
+          break;
+        case OPTION_ADSBRAIN_PORT:
+          adsbrain_port = ParseOption<int>(optarg);
+          break;
+        case OPTION_ADSBRAIN_THREAD_COUNT:
+          adsbrain_thread_cnt = ParseOption<int>(optarg);
+          break;
+#endif  // TRITON_ENABLE_ADSBRAIN
 
 #ifdef TRITON_ENABLE_VERTEX_AI
         case OPTION_ALLOW_VERTEX_AI:
@@ -1644,6 +1690,11 @@ TritonParser::Parse(int argc, char** argv)
   if (lparams.control_mode_ != TRITONSERVER_MODEL_CONTROL_POLL) {
     lparams.repository_poll_secs_ = 0;
   }
+
+#if defined(TRITON_ENABLE_ADSBRAIN)
+  lparams.adsbrain_port_ = adsbrain_port;
+  lparams.adsbrain_thread_cnt_ = adsbrain_thread_cnt;
+#endif  // TRITON_ENABLE_ADSBRAIN
 
 #ifdef TRITON_ENABLE_VERTEX_AI
   // Set default model repository if specific flag is set, postpone the

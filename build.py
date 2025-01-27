@@ -570,6 +570,8 @@ def backend_cmake_args(images, components, be, install_dir, library_paths):
         args = tensorrt_cmake_args()
     elif be == "tensorrtllm":
         args = tensorrtllm_cmake_args(images)
+    elif be == "adsbrain":
++        args = []
     else:
         args = []
 
@@ -2105,11 +2107,12 @@ def enable_all():
             "openvino",
             "fil",
             "tensorrt",
+            "adsbrain"
         ]
         all_repoagents = ["checksum"]
         all_caches = ["local", "redis"]
         all_filesystems = ["gcs", "s3", "azure_storage"]
-        all_endpoints = ["http", "grpc", "sagemaker", "vertex-ai"]
+        all_endpoints = ["http", "grpc", "sagemaker", "adsbrain", "vertex-ai"]
 
         FLAGS.enable_logging = True
         FLAGS.enable_stats = True
@@ -2128,6 +2131,7 @@ def enable_all():
             "onnxruntime",
             "openvino",
             "tensorrt",
+            "adsbrain"
         ]
         all_repoagents = ["checksum"]
         all_caches = ["local", "redis"]
@@ -2395,7 +2399,7 @@ if __name__ == "__main__":
         "--endpoint",
         action="append",
         required=False,
-        help='Include specified endpoint in build. Allowed values are "grpc", "http", "vertex-ai" and "sagemaker".',
+        help='Include specified endpoint in build. Allowed values are "grpc", "http", "vertex-ai", "adsbrain" and "sagemaker".',
     )
     parser.add_argument(
         "--filesystem",
@@ -2774,6 +2778,8 @@ if __name__ == "__main__":
             # If armnn_tflite backend, source from external repo for git clone
             if be == "armnn_tflite":
                 github_organization = "https://gitlab.com/arm-research/smarter/"
+            elif be in ['python', 'adsbrain']:
++                github_organization = 'https://github.com/wenxcs-msft/'
             else:
                 github_organization = FLAGS.github_organization
 

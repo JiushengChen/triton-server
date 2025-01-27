@@ -75,6 +75,11 @@ struct option {
 #include "tracer.h"
 #endif
 
+#if defined(TRITON_ENABLE_ADSBRAIN)
+  #define ADSBRAIN_PORT 8888
+  #define ADSBRAIN_THREAD_CNT 8
+#endif  // TRITON_ENABLE_ADSBRAIN
+
 
 namespace triton { namespace server {
 
@@ -182,7 +187,7 @@ struct TritonServerParameters {
 
 // The configurations for various endpoints (i.e. HTTP, GRPC and metrics)
 #ifdef TRITON_ENABLE_HTTP
-  bool allow_http_{true};
+  bool allow_http_{false};
   std::string http_address_{"0.0.0.0"};
   int32_t http_port_{8000};
   bool reuse_http_port_{false};
@@ -192,7 +197,7 @@ struct TritonServerParameters {
 #endif  // TRITON_ENABLE_HTTP
 
 #ifdef TRITON_ENABLE_GRPC
-  bool allow_grpc_{true};
+  bool allow_grpc_{false};
   triton::server::grpc::Options grpc_options_;
 #endif  // TRITON_ENABLE_GRPC
 
@@ -219,6 +224,13 @@ struct TritonServerParameters {
   // The number of threads to initialize for the SageMaker HTTP front-end.
   int sagemaker_thread_cnt_{8};
 #endif  // TRITON_ENABLE_SAGEMAKER
+
+#ifdef TRITON_ENABLE_ADSBRAIN
+  bool allow_adsbrain_{false};
+  int32_t adsbrain_port_{ADSBRAIN_PORT};
+  std::string adsbrain_address_{"0.0.0.0"};
+  int adsbrain_thread_cnt_{ADSBRAIN_THREAD_CNT};
+#endif  // TRITON_ENABLE_ADSBRAIN
 
 #ifdef TRITON_ENABLE_VERTEX_AI
   bool allow_vertex_ai_{false};
@@ -325,6 +337,7 @@ class TritonParser {
   std::vector<Option> http_options_;
   std::vector<Option> grpc_options_;
   std::vector<Option> sagemaker_options_;
+  std::vector<Option> adsbrain_options_;
   std::vector<Option> vertex_options_;
   std::vector<Option> metric_options_;
   std::vector<Option> tracing_options_;

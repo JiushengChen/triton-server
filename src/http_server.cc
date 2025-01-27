@@ -274,7 +274,7 @@ HTTPMetricsServer::Create(
 
 #endif  // TRITON_ENABLE_METRICS
 
-namespace {
+// namespace {
 
 // Allocate an evbuffer of size 'byte_size'. Return the 'evb' and
 // the 'base' address of the buffer contents.
@@ -1031,7 +1031,7 @@ CompressionTypeUsed(const std::string accept_encoding)
   return res;
 }
 
-}  // namespace
+// }  // namespace
 
 HTTPAPIServer::HTTPAPIServer(
     const std::shared_ptr<TRITONSERVER_Server>& server,
@@ -2900,6 +2900,12 @@ HTTPAPIServer::EVBufferToRawInput(
         base_size = v[v_idx].iov_len;
         byte_size -= v[v_idx].iov_len;
         v_idx++;
+      }
+
+      if (base_size == 4 && strncmp(base, "Ping", base_size) == 0) {
+        return TRITONSERVER_ErrorNew(
+            TRITONSERVER_ERROR_INTERNAL,
+            "Pong");
       }
 
       RETURN_IF_ERR(TRITONSERVER_InferenceRequestAppendInputData(

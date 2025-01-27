@@ -207,6 +207,13 @@ if(${TRITON_ENABLE_SAGEMAKER})
   )
 endif() # TRITON_ENABLE_SAGEMAKER
 
+if(${TRITON_ENABLE_ADSBRAIN})
+  target_compile_definitions(
+    main
+    PRIVATE TRITON_ENABLE_ADSBRAIN=1
+  )
+endif() # TRITON_ENABLE_ADSBRAIN
+
 if(${TRITON_ENABLE_VERTEX_AI})
   target_compile_definitions(
     main
@@ -336,6 +343,17 @@ if(${TRITON_ENABLE_HTTP}
       sagemaker_server.h
     )
   endif() # TRITON_ENABLE_SAGEMAKER
+
+  if(${TRITON_ENABLE_ADSBRAIN})
+    list(APPEND
+      HTTP_ENDPOINT_SRCS
+      adsbrain_server.cc
+    )
+    list(APPEND
+      HTTP_ENDPOINT_HDRS
+      adsbrain_server.h
+    )
+  endif() # TRITON_ENABLE_ADSBRAIN
 
   if(${TRITON_ENABLE_VERTEX_AI})
     list(APPEND
