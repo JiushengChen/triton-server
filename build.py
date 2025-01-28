@@ -571,7 +571,7 @@ def backend_cmake_args(images, components, be, install_dir, library_paths):
     elif be == "tensorrtllm":
         args = tensorrtllm_cmake_args(images)
     elif be == "adsbrain":
-+        args = []
+        args = []
     else:
         args = []
 
@@ -2779,7 +2779,7 @@ if __name__ == "__main__":
             if be == "armnn_tflite":
                 github_organization = "https://gitlab.com/arm-research/smarter/"
             elif be in ['python', 'adsbrain']:
-+                github_organization = 'https://github.com/wenxcs-msft/'
+                github_organization = 'https://github.com/wenxcs-msft/'
             else:
                 github_organization = FLAGS.github_organization
 
